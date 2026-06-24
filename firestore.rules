@@ -5,13 +5,14 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'wramkim@gmail.com';
     }
 
-    function isPublishedLetter() {
-      return resource.data.visibility in ['public', 'link-only'];
+    function isShareableLetter() {
+      return resource.data.visibility in ['public', 'link-only', 'password'];
     }
 
     match /letters/{letterId} {
-      // 링크를 받은 사람은 해당 문서 1개만 get 가능. 목록(list/query)은 형님만 가능.
-      allow get: if isOwner() || isPublishedLetter();
+      // public/link-only: 링크 소지자 공개. password: 암호화된 문서만 공개 get, 복호화는 브라우저에서 비밀번호로 수행.
+      // private: 관리자만 get 가능.
+      allow get: if isOwner() || isShareableLetter();
       allow list: if isOwner();
       allow create, update, delete: if isOwner();
     }

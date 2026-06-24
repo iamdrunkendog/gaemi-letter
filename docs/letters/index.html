@@ -162,6 +162,7 @@ const descEl = document.getElementById('letterDesc');
 const metaEl = document.getElementById('letterMeta');
 const bodyEl = document.getElementById('letterBody');
 const tocEl = document.getElementById('letterToc');
+let loadedItem = null;
 function esc(s='') { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(s='') { try { return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(s)); } catch { return s; } }
 function v(field) {
@@ -169,14 +170,51 @@ function v(field) {
   if ('stringValue' in field) return field.stringValue;
   if ('integerValue' in field) return Number(field.integerValue);
   if ('arrayValue' in field) return (field.arrayValue.values || []).map(v).filter(x => x !== undefined);
+  if ('mapValue' in field) return Object.fromEntries(Object.entries(field.mapValue.fields || {}).map(([key, value]) => [key, v(value)]));
   if ('timestampValue' in field) return field.timestampValue;
   return undefined;
+}
+function bytesToBase64(bytes) { return btoa(String.fromCharCode(...bytes)); }
+function base64ToBytes(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
+async function keyFromPassword(password, saltB64, iterations = 210000) {
+  const enc = new TextEncoder();
+  const material = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: base64ToBytes(saltB64), iterations, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+}
+async function decryptHtml(encryptedBody, password) {
+  const key = await keyFromPassword(password, encryptedBody.salt, encryptedBody.iterations || 210000);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(encryptedBody.iv) }, key, base64ToBytes(encryptedBody.ciphertext));
+  return new TextDecoder().decode(plain);
 }
 function buildToc() {
   const headings = [...bodyEl.querySelectorAll('h2, h3')].slice(0, 18);
   if (!headings.length) { tocEl.style.display = 'none'; return; }
   headings.forEach((h, i) => { if (!h.id) h.id = 'section-' + i; });
   tocEl.innerHTML = '<strong>Contents</strong>' + headings.map(h => '<a style="padding-left:' + (h.tagName === 'H3' ? '12px' : '0') + '" href="#' + esc(h.id) + '">' + esc(h.textContent) + '</a>').join('');
+}
+function renderMeta(item) {
+  const tags = item.tags || [];
+  metaEl.innerHTML = '<span>' + esc(fmtDate(item.date || '')) + '</span><span>약 ' + esc(item.readMin || '?') + '분</span><span class="visibility">' + esc(item.visibility || 'public') + '</span>' + tags.map(t => '<span class="tag">#' + esc(t) + '</span>').join('');
+}
+function renderBody(html) {
+  bodyEl.innerHTML = html || '<p>본문이 비어 있습니다.</p>';
+  buildToc();
+}
+function renderPasswordPrompt(item, message = '') {
+  tocEl.style.display = 'none';
+  bodyEl.innerHTML = '<div class="table-wrap" style="padding:18px"><h2>비밀번호가 필요한 개미레터입니다</h2><p>전달받은 비밀번호를 입력하면 브라우저에서 본문을 복호화합니다.</p><label>비밀번호 <input id="letterPassword" type="password" autocomplete="current-password" style="max-width:320px"></label><div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="copy-button" id="unlockButton">열기</button><span class="tag" id="unlockStatus">' + esc(message) + '</span></div></div>';
+  document.getElementById('unlockButton').addEventListener('click', async () => {
+    const status = document.getElementById('unlockStatus');
+    const password = document.getElementById('letterPassword').value;
+    status.textContent = '확인 중...';
+    try {
+      const html = await decryptHtml(item.encryptedBody, password);
+      status.textContent = '열림';
+      renderBody(html);
+    } catch (error) {
+      status.textContent = '비밀번호가 맞지 않습니다.';
+    }
+  });
 }
 document.getElementById('copyButton').addEventListener('click', async event => {
   await navigator.clipboard.writeText(location.href);
@@ -186,17 +224,21 @@ async function loadLetter() {
   if (!slug) throw new Error('문서 slug가 없습니다.');
   const api = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(cfg.projectId) + '/databases/(default)/documents/letters/' + encodeURIComponent(slug) + '?key=' + encodeURIComponent(cfg.apiKey);
   const res = await fetch(api, { cache: 'no-store' });
-  if (!res.ok) throw new Error(res.status === 404 ? '문서를 찾을 수 없습니다.' : '문서를 불러오지 못했습니다. HTTP ' + res.status);
+  if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? '문서를 찾을 수 없거나 접근 권한이 없습니다.' : '문서를 불러오지 못했습니다. HTTP ' + res.status);
   const raw = await res.json();
   const fields = raw.fields || {};
   const item = Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, v(value)]));
+  loadedItem = item;
   document.title = (item.title || '개미레터') + ' · 개미레터';
   titleEl.textContent = item.title || slug;
   descEl.textContent = item.description || '';
-  const tags = item.tags || [];
-  metaEl.innerHTML = '<span>' + esc(fmtDate(item.date || '')) + '</span><span>약 ' + esc(item.readMin || '?') + '분</span><span class="visibility">' + esc(item.visibility || 'link-only') + '</span>' + tags.map(t => '<span class="tag">#' + esc(t) + '</span>').join('');
-  bodyEl.innerHTML = item.bodyHtml || '<p>본문이 비어 있습니다.</p>';
-  buildToc();
+  renderMeta(item);
+  if (item.visibility === 'password') {
+    if (!item.encryptedBody) throw new Error('비밀번호 문서 설정이 잘못되었습니다.');
+    renderPasswordPrompt(item);
+  } else {
+    renderBody(item.bodyHtml || '<p>본문이 비어 있습니다.</p>');
+  }
 }
 loadLetter().catch(error => {
   titleEl.textContent = '문서를 열 수 없습니다';

@@ -53,14 +53,12 @@ function firebaseConfigScript() {
   return `<script>window.__gaemiFirebaseConfig = ${firebaseConfig};</script>`;
 }
 
-function firebaseImportLines(extra = '') {
+function firebaseImportLines() {
   return `import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js';
-import { getFirestore, collection, getDocs, query, orderBy, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
-const firebaseConfig = window.__gaemiFirebaseConfig;
-${extra}`;
+import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc, deleteField } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
+const firebaseConfig = window.__gaemiFirebaseConfig;`;
 }
-
 
 async function buildIndex() {
   const html = layout({
@@ -72,7 +70,7 @@ async function buildIndex() {
 }
 
 async function buildAdminPage() {
-  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">형님 Google 계정으로 로그인하면 Firestore에 저장된 발행 목록을 볼 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
+  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 계정(wramkim@gmail.com)으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
 ${firebaseConfigScript()}
 <script type="module">
 ${firebaseImportLines()}
@@ -85,7 +83,65 @@ const logoutButton = document.getElementById('logoutButton');
 const authState = document.getElementById('authState');
 const notice = document.getElementById('adminNotice');
 const list = document.getElementById('letterList');
+let currentItems = [];
 function esc(s='') { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function bytesToBase64(bytes) { return btoa(String.fromCharCode(...bytes)); }
+function base64ToBytes(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
+async function keyFromPassword(password, saltB64, iterations = 210000) {
+  const enc = new TextEncoder();
+  const material = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: base64ToBytes(saltB64), iterations, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function encryptHtml(html, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const saltB64 = bytesToBase64(salt);
+  const key = await keyFromPassword(password, saltB64);
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(html));
+  return { alg: 'AES-GCM', kdf: 'PBKDF2-SHA256', iterations: 210000, salt: saltB64, iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(cipher)) };
+}
+async function decryptHtml(encryptedBody, password) {
+  const key = await keyFromPassword(password, encryptedBody.salt, encryptedBody.iterations || 210000);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(encryptedBody.iv) }, key, base64ToBytes(encryptedBody.ciphertext));
+  return new TextDecoder().decode(plain);
+}
+function card(item) {
+  const id = esc(item.id);
+  const slug = esc(item.slug || item.id);
+  const visibility = item.visibility || 'public';
+  const canEncrypt = Boolean(item.bodyHtml || item.encryptedBody);
+  return '<div class="card" style="margin-bottom:14px" data-id="' + id + '"><div class="meta"><span>' + esc(item.date || '') + '</span><span class="visibility">' + esc(visibility) + '</span></div><h2>' + esc(item.title || item.id) + '</h2><p>' + esc(item.description || '') + '</p><div class="tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div><div class="table-wrap" style="padding:12px;margin-top:12px"><label>공개여부 <select data-role="visibility"><option value="public" ' + (visibility === 'public' || visibility === 'link-only' ? 'selected' : '') + '>공개: 링크 가진 모든 사용자</option><option value="private" ' + (visibility === 'private' ? 'selected' : '') + '>비공개: 관리자만</option><option value="password" ' + (visibility === 'password' ? 'selected' : '') + '>비밀번호</option></select></label><br><label>비밀번호 <input data-role="password" type="password" placeholder="비밀번호 모드로 바꿀 때 입력" autocomplete="new-password" style="max-width:280px"></label><p style="font-size:13px;color:var(--muted);margin:8px 0 0">비밀번호 설정 시 본문은 브라우저에서 AES-GCM으로 암호화되고 Firestore 평문 본문은 삭제됩니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="copy-button" data-role="save" ' + (canEncrypt ? '' : 'disabled') + '>저장</button><a class="pill-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">열기</a><button class="copy-button" data-role="copy">링크 복사</button><span class="tag" data-role="status"></span></div></div><div class="card-footer"><span>' + slug + '</span></div></div>';
+}
+async function saveItem(id, rootEl) {
+  const item = currentItems.find(x => x.id === id);
+  const visibility = rootEl.querySelector('[data-role="visibility"]').value;
+  const password = rootEl.querySelector('[data-role="password"]').value;
+  const status = rootEl.querySelector('[data-role="status"]');
+  status.textContent = '저장 중...';
+  const ref = doc(db, 'letters', id);
+  const update = { visibility, updatedAt: new Date().toISOString() };
+  if (visibility === 'password') {
+    if (!item.encryptedBody) {
+      if (!password) throw new Error('비밀번호를 입력해야 합니다.');
+      if (!item.bodyHtml) throw new Error('암호화할 평문 본문이 없습니다.');
+      update.encryptedBody = await encryptHtml(item.bodyHtml, password);
+      update.bodyHtml = deleteField();
+      update.bodyMarkdown = deleteField();
+      update.passwordHint = '';
+    } else if (password && item.bodyHtml) {
+      update.encryptedBody = await encryptHtml(item.bodyHtml, password);
+      update.bodyHtml = deleteField();
+      update.bodyMarkdown = deleteField();
+    }
+  } else if ((visibility === 'public' || visibility === 'link-only' || visibility === 'private') && item.encryptedBody && !item.bodyHtml) {
+    if (!password) throw new Error('암호화된 문서를 공개/비공개로 바꾸려면 현재 비밀번호를 입력해 복호화해야 합니다.');
+    update.bodyHtml = await decryptHtml(item.encryptedBody, password);
+    update.encryptedBody = deleteField();
+  }
+  await updateDoc(ref, update);
+  status.textContent = '저장됨';
+  await loadLetters(auth.currentUser);
+}
 async function loadLetters(user) {
   if (!user || user.email !== ownerEmail) {
     notice.textContent = user ? '허용되지 않은 계정입니다: ' + user.email : '로그인이 필요합니다.';
@@ -95,10 +151,21 @@ async function loadLetters(user) {
   notice.textContent = '목록을 불러오는 중...';
   try {
     const snap = await getDocs(query(collection(db, 'letters'), orderBy('date', 'desc')));
-    const items = [];
-    snap.forEach(docSnap => items.push({ id: docSnap.id, ...docSnap.data() }));
-    notice.textContent = items.length ? '총 ' + items.length + '개 레터' : '아직 등록된 레터가 없습니다.';
-    list.innerHTML = items.map(item => '<a class="card" style="margin-bottom:14px" href="/letters/' + esc(item.slug || item.id) + '/"><div class="meta"><span>' + esc(item.date || '') + '</span><span class="visibility">' + esc(item.visibility || 'link-only') + '</span></div><h2>' + esc(item.title || item.id) + '</h2><p>' + esc(item.description || '') + '</p><div class="tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div><div class="card-footer"><span>' + esc(item.slug || item.id) + '</span><span>열기 →</span></div></a>').join('');
+    currentItems = [];
+    snap.forEach(docSnap => currentItems.push({ id: docSnap.id, ...docSnap.data() }));
+    notice.textContent = currentItems.length ? '총 ' + currentItems.length + '개 레터' : '아직 등록된 레터가 없습니다.';
+    list.innerHTML = currentItems.map(card).join('');
+    list.querySelectorAll('[data-role="save"]').forEach(button => button.addEventListener('click', async event => {
+      const rootEl = event.currentTarget.closest('[data-id]');
+      try { await saveItem(rootEl.dataset.id, rootEl); }
+      catch (error) { rootEl.querySelector('[data-role="status"]').textContent = '오류: ' + error.message; }
+    }));
+    list.querySelectorAll('[data-role="copy"]').forEach(button => button.addEventListener('click', async event => {
+      const rootEl = event.currentTarget.closest('[data-id]');
+      const item = currentItems.find(x => x.id === rootEl.dataset.id);
+      await navigator.clipboard.writeText(location.origin + '/letters/' + (item.slug || item.id) + '/');
+      rootEl.querySelector('[data-role="status"]').textContent = '링크 복사됨';
+    }));
   } catch (error) {
     notice.textContent = '목록을 불러오지 못했습니다: ' + error.message;
   }
@@ -132,6 +199,7 @@ const descEl = document.getElementById('letterDesc');
 const metaEl = document.getElementById('letterMeta');
 const bodyEl = document.getElementById('letterBody');
 const tocEl = document.getElementById('letterToc');
+let loadedItem = null;
 function esc(s='') { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(s='') { try { return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(s)); } catch { return s; } }
 function v(field) {
@@ -139,14 +207,51 @@ function v(field) {
   if ('stringValue' in field) return field.stringValue;
   if ('integerValue' in field) return Number(field.integerValue);
   if ('arrayValue' in field) return (field.arrayValue.values || []).map(v).filter(x => x !== undefined);
+  if ('mapValue' in field) return Object.fromEntries(Object.entries(field.mapValue.fields || {}).map(([key, value]) => [key, v(value)]));
   if ('timestampValue' in field) return field.timestampValue;
   return undefined;
+}
+function bytesToBase64(bytes) { return btoa(String.fromCharCode(...bytes)); }
+function base64ToBytes(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
+async function keyFromPassword(password, saltB64, iterations = 210000) {
+  const enc = new TextEncoder();
+  const material = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: base64ToBytes(saltB64), iterations, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+}
+async function decryptHtml(encryptedBody, password) {
+  const key = await keyFromPassword(password, encryptedBody.salt, encryptedBody.iterations || 210000);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(encryptedBody.iv) }, key, base64ToBytes(encryptedBody.ciphertext));
+  return new TextDecoder().decode(plain);
 }
 function buildToc() {
   const headings = [...bodyEl.querySelectorAll('h2, h3')].slice(0, 18);
   if (!headings.length) { tocEl.style.display = 'none'; return; }
   headings.forEach((h, i) => { if (!h.id) h.id = 'section-' + i; });
   tocEl.innerHTML = '<strong>Contents</strong>' + headings.map(h => '<a style="padding-left:' + (h.tagName === 'H3' ? '12px' : '0') + '" href="#' + esc(h.id) + '">' + esc(h.textContent) + '</a>').join('');
+}
+function renderMeta(item) {
+  const tags = item.tags || [];
+  metaEl.innerHTML = '<span>' + esc(fmtDate(item.date || '')) + '</span><span>약 ' + esc(item.readMin || '?') + '분</span><span class="visibility">' + esc(item.visibility || 'public') + '</span>' + tags.map(t => '<span class="tag">#' + esc(t) + '</span>').join('');
+}
+function renderBody(html) {
+  bodyEl.innerHTML = html || '<p>본문이 비어 있습니다.</p>';
+  buildToc();
+}
+function renderPasswordPrompt(item, message = '') {
+  tocEl.style.display = 'none';
+  bodyEl.innerHTML = '<div class="table-wrap" style="padding:18px"><h2>비밀번호가 필요한 개미레터입니다</h2><p>전달받은 비밀번호를 입력하면 브라우저에서 본문을 복호화합니다.</p><label>비밀번호 <input id="letterPassword" type="password" autocomplete="current-password" style="max-width:320px"></label><div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="copy-button" id="unlockButton">열기</button><span class="tag" id="unlockStatus">' + esc(message) + '</span></div></div>';
+  document.getElementById('unlockButton').addEventListener('click', async () => {
+    const status = document.getElementById('unlockStatus');
+    const password = document.getElementById('letterPassword').value;
+    status.textContent = '확인 중...';
+    try {
+      const html = await decryptHtml(item.encryptedBody, password);
+      status.textContent = '열림';
+      renderBody(html);
+    } catch (error) {
+      status.textContent = '비밀번호가 맞지 않습니다.';
+    }
+  });
 }
 document.getElementById('copyButton').addEventListener('click', async event => {
   await navigator.clipboard.writeText(location.href);
@@ -156,17 +261,21 @@ async function loadLetter() {
   if (!slug) throw new Error('문서 slug가 없습니다.');
   const api = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(cfg.projectId) + '/databases/(default)/documents/letters/' + encodeURIComponent(slug) + '?key=' + encodeURIComponent(cfg.apiKey);
   const res = await fetch(api, { cache: 'no-store' });
-  if (!res.ok) throw new Error(res.status === 404 ? '문서를 찾을 수 없습니다.' : '문서를 불러오지 못했습니다. HTTP ' + res.status);
+  if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? '문서를 찾을 수 없거나 접근 권한이 없습니다.' : '문서를 불러오지 못했습니다. HTTP ' + res.status);
   const raw = await res.json();
   const fields = raw.fields || {};
   const item = Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, v(value)]));
+  loadedItem = item;
   document.title = (item.title || '개미레터') + ' · 개미레터';
   titleEl.textContent = item.title || slug;
   descEl.textContent = item.description || '';
-  const tags = item.tags || [];
-  metaEl.innerHTML = '<span>' + esc(fmtDate(item.date || '')) + '</span><span>약 ' + esc(item.readMin || '?') + '분</span><span class="visibility">' + esc(item.visibility || 'link-only') + '</span>' + tags.map(t => '<span class="tag">#' + esc(t) + '</span>').join('');
-  bodyEl.innerHTML = item.bodyHtml || '<p>본문이 비어 있습니다.</p>';
-  buildToc();
+  renderMeta(item);
+  if (item.visibility === 'password') {
+    if (!item.encryptedBody) throw new Error('비밀번호 문서 설정이 잘못되었습니다.');
+    renderPasswordPrompt(item);
+  } else {
+    renderBody(item.bodyHtml || '<p>본문이 비어 있습니다.</p>');
+  }
 }
 loadLetter().catch(error => {
   titleEl.textContent = '문서를 열 수 없습니다';
