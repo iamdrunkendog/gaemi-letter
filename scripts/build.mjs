@@ -186,4 +186,5 @@ const index = layout({
 await fs.writeFile(path.join(outDir, 'index.html'), index);
 await buildAdminPage();
 await fs.writeFile(path.join(outDir, '.nojekyll'), '');
+await fs.writeFile(path.join(outDir, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
 console.log(`Built ${letters.length} letters to docs/`);
