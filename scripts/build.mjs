@@ -288,6 +288,7 @@ loadLetter().catch(error => {
   const letterDir = path.join(outDir, 'letters');
   await fs.mkdir(letterDir, { recursive: true });
   await fs.writeFile(path.join(letterDir, 'index.html'), html);
+  await fs.writeFile(path.join(outDir, '404.html'), html);
 }
 
 await fs.rm(outDir, { recursive: true, force: true });
