@@ -297,4 +297,5 @@ await buildAdminPage();
 await buildLetterViewer();
 await fs.writeFile(path.join(outDir, '.nojekyll'), '');
 await fs.writeFile(path.join(outDir, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
+await fs.writeFile(path.join(outDir, 'CNAME'), 'letter.gaemi.kim\n');
 console.log('Built backend-managed gaemi-letter viewer to docs/');
