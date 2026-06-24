@@ -188,7 +188,7 @@ async function loadLetters(user) {
 }
 loginButton.addEventListener('click', async () => {
   try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-  catch (error) { notice.textContent = '로그인 실패: ' + error.message + ' / Firebase Console에서 Authentication > Sign-in method > Google provider와 Authorized domains(iamdrunkendog.github.io)를 확인해주세요.'; }
+  catch (error) { notice.textContent = '로그인 실패: ' + error.message + ' / Firebase Console에서 Authentication > Sign-in method > Google provider와 Authorized domains(gaemi-letter.web.app)를 확인해주세요.'; }
 });
 logoutButton.addEventListener('click', () => signOut(auth));
 onAuthStateChanged(auth, user => {
