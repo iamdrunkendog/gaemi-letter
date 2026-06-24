@@ -66,6 +66,7 @@ function layout({ title, description, body, canonical = '', extraHead = '' }) {
   <meta property="og:title" content="${escapeHtml(title)}" />
   <meta property="og:description" content="${escapeHtml(description)}" />
   <meta name="twitter:card" content="summary" />
+  <meta name="robots" content="noindex, nofollow, noarchive" />
   <style>${style}</style>
   ${extraHead}
 </head>
@@ -123,11 +124,10 @@ for (const file of files) {
   letters.push({ title, desc, date, tags, slug, visibility: parsed.data.visibility || 'public', readMin });
 }
 letters.sort((a, b) => String(b.date).localeCompare(String(a.date)) || a.title.localeCompare(b.title));
-const cards = letters.map(l => `<a class="card" href="letters/${l.slug}/"><div class="meta"><span>${fmtDate(l.date)}</span><span>약 ${l.readMin}분</span><span class="visibility">${escapeHtml(l.visibility)}</span></div><h2>${escapeHtml(l.title)}</h2><p>${escapeHtml(l.desc)}</p><div class="tags">${l.tags.map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('')}</div><div class="card-footer"><span>열기</span><span>→</span></div></a>`).join('');
 const index = layout({
   title: '개미레터',
-  description: 'Markdown으로 작성한 조사와 정리 글을 읽기 좋게 배달하는 개미의 문서 페이지입니다.',
-  body: `<main><section class="hero"><div class="eyebrow">Gaemi Letter</div><h1>개미가 정리해 보내는 작은 문서 배달함</h1><p>Markdown으로 작성한 조사, 분석, 체크리스트를 웹에서 읽기 좋게 보여주고 링크로 나눕니다.</p></section><section class="letter-grid">${cards || '<p>아직 공개된 레터가 없습니다.</p>'}</section></main>`
+  description: '개미레터는 전달받은 링크로만 문서를 여는 비공개형 문서 배달함입니다.',
+  body: `<main><section class="hero"><div class="eyebrow">Gaemi Letter</div><h1>전달받은 링크로만 열리는 개미레터</h1><p>문서 목록은 공개하지 않습니다. 개별 레터는 공유받은 전용 링크로만 접근할 수 있습니다.</p></section><section class="letter-grid"><div class="card"><div class="meta"><span class="visibility">link-only</span></div><h2>목록 비공개</h2><p>개미레터는 검색과 목록 탐색을 막고, 필요한 사람에게만 개별 링크를 전달하는 방식으로 운영합니다.</p><div class="card-footer"><span>링크를 받은 문서만 열어주세요.</span></div></div></section></main>`
 });
 await fs.writeFile(path.join(outDir, 'index.html'), index);
 await fs.writeFile(path.join(outDir, '.nojekyll'), '');
