@@ -89,6 +89,60 @@ document.querySelectorAll('pre code').forEach(code => code.parentElement.setAttr
 </script>
 </body></html>`;
 }
+
+async function buildAdminPage() {
+  const firebaseConfig = await fs.readFile(path.join(root, 'src', 'firebase-config.json'), 'utf8');
+  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">형님 Google 계정으로 로그인하면 Firestore에 저장된 발행 목록을 볼 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="../../">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js';
+import { getFirestore, collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
+const firebaseConfig = ${firebaseConfig};
+const ownerEmail = 'wramkim@gmail.com';
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const loginButton = document.getElementById('loginButton');
+const logoutButton = document.getElementById('logoutButton');
+const authState = document.getElementById('authState');
+const notice = document.getElementById('adminNotice');
+const list = document.getElementById('letterList');
+function esc(s='') { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function loadLetters(user) {
+  if (!user || user.email !== ownerEmail) {
+    notice.textContent = user ? '허용되지 않은 계정입니다: ' + user.email : '로그인이 필요합니다.';
+    list.innerHTML = '';
+    return;
+  }
+  notice.textContent = '목록을 불러오는 중...';
+  try {
+    const snap = await getDocs(query(collection(db, 'letters'), orderBy('date', 'desc')));
+    const items = [];
+    snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+    notice.textContent = items.length ? '총 ' + items.length + '개 레터' : '아직 등록된 레터가 없습니다.';
+    list.innerHTML = items.map(item => '<a class="card" style="margin-bottom:14px" href="' + esc(item.url) + '"><div class="meta"><span>' + esc(item.date || '') + '</span><span class="visibility">' + esc(item.visibility || 'link-only') + '</span></div><h2>' + esc(item.title || item.id) + '</h2><p>' + esc(item.description || '') + '</p><div class="tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div><div class="card-footer"><span>' + esc(item.slug || item.id) + '</span><span>열기 →</span></div></a>').join('');
+  } catch (error) {
+    notice.textContent = '목록을 불러오지 못했습니다: ' + error.message;
+  }
+}
+loginButton.addEventListener('click', async () => {
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch (error) { notice.textContent = '로그인 실패: ' + error.message + ' / Firebase Console에서 Authentication > Sign-in method > Google provider와 Authorized domains(iamdrunkendog.github.io)를 확인해주세요.'; }
+});
+logoutButton.addEventListener('click', () => signOut(auth));
+onAuthStateChanged(auth, user => {
+  loginButton.style.display = user ? 'none' : '';
+  logoutButton.style.display = user ? '' : 'none';
+  authState.textContent = user ? user.email : '로그인 전';
+  loadLetters(user);
+});
+</script>`;
+  const html = layout({ title: '개미레터 관리자 · 개미레터', description: '개미레터 관리자 목록', body: adminBody });
+  const adminDir = path.join(outDir, 'admin');
+  await fs.mkdir(adminDir, { recursive: true });
+  await fs.writeFile(path.join(adminDir, 'index.html'), html);
+}
+
 function tocFromHtml(html) {
   const items = [...html.matchAll(/<h([23]) id="([^"]+)">([\s\S]*?)<\/h\1>/g)].slice(0, 18).map(m => {
     const text = m[3].replace(/<[^>]+>/g, '');
@@ -130,5 +184,6 @@ const index = layout({
   body: `<main><section class="hero"><div class="eyebrow">Gaemi Letter</div><h1>전달받은 링크로만 열리는 개미레터</h1><p>문서 목록은 공개하지 않습니다. 개별 레터는 공유받은 전용 링크로만 접근할 수 있습니다.</p></section><section class="letter-grid"><div class="card"><div class="meta"><span class="visibility">link-only</span></div><h2>목록 비공개</h2><p>개미레터는 검색과 목록 탐색을 막고, 필요한 사람에게만 개별 링크를 전달하는 방식으로 운영합니다.</p><div class="card-footer"><span>링크를 받은 문서만 열어주세요.</span></div></div></section></main>`
 });
 await fs.writeFile(path.join(outDir, 'index.html'), index);
+await buildAdminPage();
 await fs.writeFile(path.join(outDir, '.nojekyll'), '');
 console.log(`Built ${letters.length} letters to docs/`);
