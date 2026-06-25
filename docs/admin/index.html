@@ -146,7 +146,7 @@ tr:last-child td { border-bottom: 0; }
   <a class="brand" href="/"><img class="brand-avatar" src="/assets/profile.jpg" alt="개미" width="32" height="32" /><span>개미레터</span></a>
   <div class="header-actions"><a class="icon-button" href="/admin/" title="관리자 페이지" aria-label="관리자 페이지"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 7.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12h10m0 0-3.2-3.2M14 12l-3.2 3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a><button class="icon-button" id="themeToggle" title="테마 전환" aria-label="테마 전환">◐</button></div>
 </div></header>
-<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 계정(wramkim@gmail.com)으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
+<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 권한이 있는 Google 계정으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
 <script>window.__gaemiFirebaseConfig = {
   "projectId": "gaemi-letter",
   "appId": "1:32998376971:web:0d4b83835d9c97dde8e90e",
@@ -160,7 +160,6 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.2/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js';
 import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc, deleteField } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
 const firebaseConfig = window.__gaemiFirebaseConfig;
-const ownerEmail = 'wramkim@gmail.com';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -229,8 +228,8 @@ async function saveItem(id, rootEl) {
   await loadLetters(auth.currentUser);
 }
 async function loadLetters(user) {
-  if (!user || user.email !== ownerEmail) {
-    notice.textContent = user ? '허용되지 않은 계정입니다: ' + user.email : '로그인이 필요합니다.';
+  if (!user) {
+    notice.textContent = '로그인이 필요합니다.';
     list.innerHTML = '';
     return;
   }
@@ -253,7 +252,7 @@ async function loadLetters(user) {
       rootEl.querySelector('[data-role="status"]').textContent = '링크 복사됨';
     }));
   } catch (error) {
-    notice.textContent = '목록을 불러오지 못했습니다: ' + error.message;
+    notice.textContent = '목록을 불러오지 못했습니다. 관리자 권한이 없거나 설정을 확인해야 합니다.';
   }
 }
 loginButton.addEventListener('click', async () => {
@@ -264,7 +263,7 @@ logoutButton.addEventListener('click', () => signOut(auth));
 onAuthStateChanged(auth, user => {
   loginButton.style.display = user ? 'none' : '';
   logoutButton.style.display = user ? '' : 'none';
-  authState.textContent = user ? user.email : '로그인 전';
+  authState.textContent = user ? '로그인됨' : '로그인 전';
   loadLetters(user);
 });
 </script>

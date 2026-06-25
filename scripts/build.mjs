@@ -74,11 +74,10 @@ async function buildIndex() {
 }
 
 async function buildAdminPage() {
-  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 계정(wramkim@gmail.com)으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
+  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 권한이 있는 Google 계정으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
 ${firebaseConfigScript()}
 <script type="module">
 ${firebaseImportLines()}
-const ownerEmail = 'wramkim@gmail.com';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -147,8 +146,8 @@ async function saveItem(id, rootEl) {
   await loadLetters(auth.currentUser);
 }
 async function loadLetters(user) {
-  if (!user || user.email !== ownerEmail) {
-    notice.textContent = user ? '허용되지 않은 계정입니다: ' + user.email : '로그인이 필요합니다.';
+  if (!user) {
+    notice.textContent = '로그인이 필요합니다.';
     list.innerHTML = '';
     return;
   }
@@ -171,7 +170,7 @@ async function loadLetters(user) {
       rootEl.querySelector('[data-role="status"]').textContent = '링크 복사됨';
     }));
   } catch (error) {
-    notice.textContent = '목록을 불러오지 못했습니다: ' + error.message;
+    notice.textContent = '목록을 불러오지 못했습니다. 관리자 권한이 없거나 설정을 확인해야 합니다.';
   }
 }
 loginButton.addEventListener('click', async () => {
@@ -182,7 +181,7 @@ logoutButton.addEventListener('click', () => signOut(auth));
 onAuthStateChanged(auth, user => {
   loginButton.style.display = user ? 'none' : '';
   logoutButton.style.display = user ? '' : 'none';
-  authState.textContent = user ? user.email : '로그인 전';
+  authState.textContent = user ? '로그인됨' : '로그인 전';
   loadLetters(user);
 });
 </script>`;
