@@ -60,7 +60,7 @@ function firebaseConfigScript() {
 function firebaseImportLines() {
   return `import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js';
-import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc, deleteField } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
+import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc, deleteField, getDoc } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
 const firebaseConfig = window.__gaemiFirebaseConfig;`;
 }
 
@@ -74,7 +74,7 @@ async function buildIndex() {
 }
 
 async function buildAdminPage() {
-  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 권한이 있는 Google 계정으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer">Firestore Console</a></aside></main>
+  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 권한이 있는 Google 계정으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer" class="admin-only" style="display:none">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer" class="admin-only" style="display:none">Firestore Console</a></aside></main>
 ${firebaseConfigScript()}
 <script type="module">
 ${firebaseImportLines()}
@@ -182,6 +182,7 @@ onAuthStateChanged(auth, user => {
   loginButton.style.display = user ? 'none' : '';
   logoutButton.style.display = user ? '' : 'none';
   authState.textContent = user ? '로그인됨' : '로그인 전';
+  document.querySelectorAll('.admin-only').forEach(el => el.style.display = user ? '' : 'none');
   loadLetters(user);
 });
 </script>`;
@@ -194,26 +195,22 @@ onAuthStateChanged(auth, user => {
 async function buildLetterViewer() {
   const body = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Gaemi Letter</div><h1 id="letterTitle">개미레터를 불러오는 중</h1><p class="article-desc" id="letterDesc">Firestore에서 문서를 가져오고 있습니다.</p><div class="meta" id="letterMeta"></div><div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="copyButton">공유 링크 복사</button><a class="pill-link" href="/">처음으로</a></div></header><article class="article" id="letterBody"><p>잠시만 기다려주세요.</p></article></section><aside class="toc" id="letterToc"><strong>Contents</strong></aside></main>
 <script>window.__gaemiFirebaseConfig = ${firebaseConfig};</script>
-<script>
-const cfg = window.__gaemiFirebaseConfig;
+<script type="module">
+${firebaseImportLines()}
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
 const slug = decodeURIComponent(location.pathname.replace(new RegExp('^/letters/'), '').replace(new RegExp('/$'), ''));
 const titleEl = document.getElementById('letterTitle');
 const descEl = document.getElementById('letterDesc');
 const metaEl = document.getElementById('letterMeta');
 const bodyEl = document.getElementById('letterBody');
 const tocEl = document.getElementById('letterToc');
-let loadedItem = null;
+
 function esc(s='') { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(s='') { try { return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(s)); } catch { return s; } }
-function v(field) {
-  if (!field) return undefined;
-  if ('stringValue' in field) return field.stringValue;
-  if ('integerValue' in field) return Number(field.integerValue);
-  if ('arrayValue' in field) return (field.arrayValue.values || []).map(v).filter(x => x !== undefined);
-  if ('mapValue' in field) return Object.fromEntries(Object.entries(field.mapValue.fields || {}).map(([key, value]) => [key, v(value)]));
-  if ('timestampValue' in field) return field.timestampValue;
-  return undefined;
-}
+
 function bytesToBase64(bytes) { return btoa(String.fromCharCode(...bytes)); }
 function base64ToBytes(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
 async function keyFromPassword(password, saltB64, iterations = 210000) {
@@ -265,41 +262,61 @@ document.getElementById('copyButton').addEventListener('click', async event => {
   await navigator.clipboard.writeText(location.href);
   event.currentTarget.textContent = '복사됨';
 });
-async function loadLetter() {
+
+async function loadLetter(user) {
   if (!slug) throw new Error('문서 slug가 없습니다.');
-  const api = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(cfg.projectId) + '/databases/(default)/documents/letters/' + encodeURIComponent(slug) + '?key=' + encodeURIComponent(cfg.apiKey);
-  const res = await fetch(api, { cache: 'no-store' });
-  if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? '문서를 찾을 수 없거나 접근 권한이 없습니다.' : '문서를 불러오지 못했습니다. HTTP ' + res.status);
-  const raw = await res.json();
-  const fields = raw.fields || {};
-  const item = Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, v(value)]));
-  loadedItem = item;
-
-  const visibility = item.visibility || 'public';
-  if (visibility === 'private') {
-    throw new Error('접근 권한이 없습니다.');
-  }
-
-  if (visibility === 'password') {
-    if (!item.encryptedBody) throw new Error('비밀번호 문서 설정이 잘못되었습니다.');
-    document.title = '개미레터 · 보호 문서';
-    titleEl.textContent = '보호된 개미레터';
-    descEl.textContent = '비밀번호가 필요한 개미레터입니다.';
-    metaEl.innerHTML = '';
-    renderPasswordPrompt(item);
-  } else {
-    document.title = (item.title || '개미레터') + ' · 개미레터';
-    titleEl.textContent = item.title || slug;
-    descEl.textContent = item.description || '';
-    renderMeta(item);
-    renderBody(item.bodyHtml || '<p>본문이 비어 있습니다.</p>');
+  try {
+    const docSnap = await getDoc(doc(db, 'letters', slug));
+    if (!docSnap.exists()) {
+      throw new Error('문서를 찾을 수 없거나 접근 권한이 없습니다.');
+    }
+    const item = docSnap.data();
+    const visibility = item.visibility || 'public';
+    if (visibility === 'password') {
+      if (!item.encryptedBody) throw new Error('비밀번호 문서 설정이 잘못되었습니다.');
+      document.title = '개미레터 · 보호 문서';
+      titleEl.textContent = '보호된 개미레터';
+      descEl.textContent = '비밀번호가 필요한 개미레터입니다.';
+      metaEl.innerHTML = '';
+      renderPasswordPrompt(item);
+    } else {
+      document.title = (item.title || '개미레터') + ' · 개미레터';
+      titleEl.textContent = item.title || slug;
+      descEl.textContent = item.description || '';
+      renderMeta(item);
+      renderBody(item.bodyHtml || '<p>본문이 비어 있습니다.</p>');
+    }
+  } catch (error) {
+    if (!user) {
+      document.title = '개미레터 · 문서';
+      titleEl.textContent = '비공개 문서';
+      descEl.textContent = '이 문서를 보려면 관리자 계정으로 로그인해야 합니다.';
+      metaEl.innerHTML = '';
+      bodyEl.innerHTML = '<div class="table-wrap" style="padding:18px;text-align:center"><button class="copy-button" id="loginButton">Google로 로그인</button></div>';
+      tocEl.style.display = 'none';
+      document.getElementById('loginButton')?.addEventListener('click', async () => {
+        try {
+          await signInWithPopup(auth, new GoogleAuthProvider());
+        } catch (err) {
+          alert('로그인 실패: ' + err.message);
+        }
+      });
+    } else {
+      document.title = '개미레터 · 권한 없음';
+      titleEl.textContent = '접근 권한이 없습니다';
+      descEl.textContent = '관리자 계정이 아니거나 존재하지 않는 문서입니다.';
+      metaEl.innerHTML = '';
+      bodyEl.innerHTML = '<div class="table-wrap" style="padding:18px;text-align:center"><p>로그인한 계정: ' + esc(user.email) + '</p><button class="copy-button" id="logoutButton">로그아웃</button></div>';
+      tocEl.style.display = 'none';
+      document.getElementById('logoutButton')?.addEventListener('click', () => signOut(auth));
+    }
   }
 }
-loadLetter().catch(error => {
-  titleEl.textContent = '문서를 열 수 없습니다';
-  descEl.textContent = '링크가 잘못되었거나 접근 권한이 없습니다.';
-  bodyEl.innerHTML = '<p>' + esc(error.message) + '</p>';
-  tocEl.style.display = 'none';
+
+globalThis.loadLetter = loadLetter;
+
+onAuthStateChanged(auth, user => {
+  window.__loadPromise = loadLetter(user);
 });
 </script>`;
   const html = layout({ title: '개미레터 · 문서', description: '전달받은 링크로 여는 개미레터 문서입니다.', body });

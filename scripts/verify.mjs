@@ -39,14 +39,15 @@ async function runTest() {
   console.log('✓ Static meta tags are generic.');
 
   // Extract the viewer javascript block
-  const matches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  if (matches.length < 2) {
+  const matches = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)];
+  if (matches.length < 1) {
     throw new Error('Verification failed: Could not find main script block in HTML.');
   }
-  const originalScript = matches[1][1];
+  const originalScript = matches[0][1];
 
-  // Modify script: mock decryptHtml to check password, and capture loadLetter promise
-  let scriptCode = originalScript.replace(
+  // Modify script: mock decryptHtml to check password
+  let scriptCode = originalScript.replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/g, '');
+  scriptCode = scriptCode.replace(
     /async function decryptHtml\([\s\S]*?\n\}/,
     `async function decryptHtml(encryptedBody, password) {
       if (password === 'correct') return '<h2>Decrypted Heading</h2><p>Decrypted Content</p>';
@@ -54,13 +55,8 @@ async function runTest() {
     }`
   );
 
-  scriptCode = scriptCode.replace(
-    /loadLetter\(\)\.catch\(/,
-    'globalThis.__loadPromise = loadLetter().catch('
-  );
-
   // Helper to run sandbox test case
-  async function testCase({ slug, mockFetch, testFn }) {
+  async function testCase({ slug, mockGetDoc, testFn }) {
     const elements = {};
     const sandbox = {
       window: {
@@ -82,7 +78,42 @@ async function runTest() {
       location: {
         pathname: `/letters/${encodeURIComponent(slug)}`
       },
-      fetch: mockFetch,
+      // Firebase Mocking
+      initializeApp: () => ({}),
+      getAuth: () => {
+        if (!sandbox.__auth) {
+          sandbox.__auth = { currentUser: null };
+        }
+        return sandbox.__auth;
+      },
+      GoogleAuthProvider: class {},
+      signInWithPopup: async (auth) => {
+        const mockUser = { email: 'wramkim@gmail.com' };
+        auth.currentUser = mockUser;
+        if (sandbox.__authCallback) {
+          sandbox.__authCallback(mockUser);
+          await sandbox.window.__loadPromise;
+        }
+      },
+      signOut: async (auth) => {
+        auth.currentUser = null;
+        if (sandbox.__authCallback) {
+          sandbox.__authCallback(null);
+          await sandbox.window.__loadPromise;
+        }
+      },
+      onAuthStateChanged: (auth, cb) => {
+        sandbox.__authCallback = cb;
+        cb(auth.currentUser);
+      },
+      getFirestore: () => ({}),
+      doc: (db, path, id) => ({ path, id }),
+      getDoc: async (docRef) => {
+        if (mockGetDoc) {
+          return mockGetDoc(docRef, sandbox);
+        }
+        throw new Error('mockGetDoc not implemented');
+      },
       TextEncoder,
       TextDecoder,
       console: {
@@ -95,7 +126,7 @@ async function runTest() {
     sandbox.globalThis = sandbox;
 
     vm.runInNewContext(scriptCode, sandbox);
-    await sandbox.__loadPromise;
+    await sandbox.window.__loadPromise;
 
     await testFn(sandbox, elements);
   }
@@ -103,15 +134,13 @@ async function runTest() {
   // 2. Test Public Letter Flow
   await testCase({
     slug: 'public-letter',
-    mockFetch: async () => ({
-      ok: true,
-      json: async () => ({
-        fields: {
-          title: { stringValue: 'Public Letter Title' },
-          description: { stringValue: 'Public Letter Description' },
-          visibility: { stringValue: 'public' },
-          bodyHtml: { stringValue: '<p>Public content</p>' }
-        }
+    mockGetDoc: async () => ({
+      exists: () => true,
+      data: () => ({
+        title: 'Public Letter Title',
+        description: 'Public Letter Description',
+        visibility: 'public',
+        bodyHtml: '<p>Public content</p>'
       })
     }),
     testFn: async (sandbox, elements) => {
@@ -134,22 +163,16 @@ async function runTest() {
   // 3. Test Password-Protected Letter Flow
   await testCase({
     slug: 'password-letter',
-    mockFetch: async () => ({
-      ok: true,
-      json: async () => ({
-        fields: {
-          title: { stringValue: 'Protected Title' },
-          description: { stringValue: 'Protected Description' },
-          visibility: { stringValue: 'password' },
-          encryptedBody: {
-            mapValue: {
-              fields: {
-                salt: { stringValue: 'saltB64' },
-                iv: { stringValue: 'ivB64' },
-                ciphertext: { stringValue: 'cipherB64' }
-              }
-            }
-          }
+    mockGetDoc: async () => ({
+      exists: () => true,
+      data: () => ({
+        title: 'Protected Title',
+        description: 'Protected Description',
+        visibility: 'password',
+        encryptedBody: {
+          salt: 'saltB64',
+          iv: 'ivB64',
+          ciphertext: 'cipherB64'
         }
       })
     }),
@@ -183,7 +206,6 @@ async function runTest() {
       }
 
       // Enter WRONG password
-      letterPassword.textContent = 'wrong-password'; // Set mock input value
       letterPassword.value = 'wrong-password';
       await unlockButton.listeners.click();
 
@@ -196,7 +218,6 @@ async function runTest() {
       }
 
       // Enter CORRECT password
-      letterPassword.textContent = 'correct';
       letterPassword.value = 'correct';
       await unlockButton.listeners.click();
 
@@ -226,39 +247,185 @@ async function runTest() {
   // 4. Test Private Letter Flow
   await testCase({
     slug: 'private-letter',
-    mockFetch: async () => ({
-      ok: true,
-      json: async () => ({
-        fields: {
-          title: { stringValue: 'Private Title' },
-          description: { stringValue: 'Private Description' },
-          visibility: { stringValue: 'private' },
-          bodyHtml: { stringValue: '<p>Secret content</p>' }
-        }
-      })
-    }),
+    mockGetDoc: async (docRef, sandbox) => {
+      const auth = sandbox.getAuth();
+      if (auth.currentUser && auth.currentUser.email === 'wramkim@gmail.com') {
+        return {
+          exists: () => true,
+          data: () => ({
+            title: 'Private Title',
+            description: 'Private Description',
+            visibility: 'private',
+            bodyHtml: '<p>Secret content</p>'
+          })
+        };
+      } else {
+        const err = new Error('Permission denied');
+        err.code = 'permission-denied';
+        throw err;
+      }
+    },
     testFn: async (sandbox, elements) => {
-      // Must fall back to error state
-      if (elements.letterTitle.textContent !== '문서를 열 수 없습니다') {
-        throw new Error('Private letter should fall back to error title.');
-      }
-      if (elements.letterDesc.textContent !== '링크가 잘못되었거나 접근 권한이 없습니다.') {
-        throw new Error('Private letter should show access error description.');
-      }
+      // 4a. Verify before auth (generic login-required / authorization-required view)
       if (sandbox.document.title !== '개미레터 · 문서') {
-        throw new Error('Private letter title should remain generic.');
+        throw new Error(`Private letter title before auth should be generic, got: ${sandbox.document.title}`);
+      }
+      if (elements.letterTitle.textContent !== '비공개 문서') {
+        throw new Error(`Private header title before auth should be '비공개 문서', got: ${elements.letterTitle.textContent}`);
+      }
+      if (elements.letterDesc.textContent !== '이 문서를 보려면 관리자 계정으로 로그인해야 합니다.') {
+        throw new Error(`Private description before auth should be login required, got: ${elements.letterDesc.textContent}`);
       }
       if (elements.letterMeta.innerHTML !== '') {
-        throw new Error('Private letter metadata should be empty.');
+        throw new Error('Private letter meta should be empty before auth.');
+      }
+      if (!elements.letterBody.innerHTML.includes('loginButton')) {
+        throw new Error('Private letter body should show login button.');
       }
       if (elements.letterBody.innerHTML.includes('Secret content')) {
-        throw new Error('Private letter content leaked.');
+        throw new Error('Private letter content leaked before auth.');
       }
-      console.log('✓ Private letter falls back to error state without leaking metadata.');
+
+      // Simulate clicking login button
+      const loginBtn = sandbox.document.getElementById('loginButton');
+      if (!loginBtn || !loginBtn.listeners.click) {
+        throw new Error('Login button or click listener not found.');
+      }
+
+      // Let's call the click listener which triggers signInWithPopup and updates auth and re-loads
+      await loginBtn.listeners.click();
+
+      // 4b. Verify after auth (authenticated owner fetch succeeds and renders)
+      if (sandbox.document.title !== 'Private Title · 개미레터') {
+        throw new Error(`Private letter title after auth should be set, got: ${sandbox.document.title}`);
+      }
+      if (elements.letterTitle.textContent !== 'Private Title') {
+        throw new Error(`Private header title after auth should be Private Title, got: ${elements.letterTitle.textContent}`);
+      }
+      if (elements.letterDesc.textContent !== 'Private Description') {
+        throw new Error(`Private description after auth should be Private Description, got: ${elements.letterDesc.textContent}`);
+      }
+      if (!elements.letterMeta.innerHTML.includes('private')) {
+        throw new Error('Private letter meta should show after auth.');
+      }
+      if (!elements.letterBody.innerHTML.includes('Secret content')) {
+        throw new Error('Private letter content should render after auth.');
+      }
+
+      console.log('✓ Private letter hides metadata initially and renders correctly after successful auth.');
     }
   });
 
+  // 5. Test Admin Console Links Visibility
+  await testAdminPage();
+
   console.log('Verification finished successfully! All tests passed.');
+}
+
+async function testAdminPage() {
+  const adminHtmlPath = path.join(root, 'docs', 'admin', 'index.html');
+  const html = await fs.readFile(adminHtmlPath, 'utf8');
+
+  // Verify that statically, they have style="display:none"
+  if (!html.includes('class="admin-only" style="display:none"')) {
+    throw new Error('Verification failed: Admin links do not statically have display:none.');
+  }
+  console.log('✓ Admin console links are statically hidden.');
+
+  // Extract the javascript block
+  const matches = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)];
+  if (matches.length < 1) {
+    throw new Error('Verification failed: Could not find script block in admin HTML.');
+  }
+  const originalScript = matches[0][1];
+
+  let scriptCode = originalScript.replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/g, '');
+
+  const elements = {
+    loginButton: new MockElement('loginButton'),
+    logoutButton: new MockElement('logoutButton'),
+    authState: new MockElement('authState'),
+    adminNotice: new MockElement('adminNotice'),
+    letterList: new MockElement('letterList'),
+  };
+
+  const adminOnlyLinks = [
+    { style: { display: 'none' } },
+    { style: { display: 'none' } }
+  ];
+
+  const sandbox = {
+    window: {
+      __gaemiFirebaseConfig: { projectId: 'test-project', apiKey: 'test-key' }
+    },
+    document: {
+      title: '개미레터 · 관리자',
+      getElementById(id) {
+        if (!elements[id]) {
+          elements[id] = new MockElement(id);
+        }
+        return elements[id];
+      },
+      querySelectorAll(selector) {
+        if (selector === '.admin-only') {
+          return adminOnlyLinks;
+        }
+        return [];
+      }
+    },
+    // Firebase Mocking
+    initializeApp: () => ({}),
+    getAuth: () => ({ currentUser: null }),
+    GoogleAuthProvider: class {},
+    signInWithPopup: async () => {},
+    signOut: async () => {},
+    onAuthStateChanged: (auth, cb) => {
+      sandbox.__authCallback = cb;
+      cb(auth.currentUser);
+    },
+    getFirestore: () => ({}),
+    collection: () => ({}),
+    getDocs: async () => ({
+      forEach: () => {}
+    }),
+    query: () => ({}),
+    orderBy: () => ({}),
+    doc: () => ({}),
+    updateDoc: async () => {},
+    deleteField: () => ({}),
+    TextEncoder,
+    TextDecoder,
+    console: { log: () => {}, error: () => {} },
+    globalThis: {}
+  };
+
+  sandbox.globalThis = sandbox;
+
+  vm.runInNewContext(scriptCode, sandbox);
+
+  // Before login:
+  if (adminOnlyLinks[0].style.display !== 'none' || adminOnlyLinks[1].style.display !== 'none') {
+    throw new Error('Admin links should be hidden before login');
+  }
+
+  // Simulate login
+  const mockUser = { email: 'wramkim@gmail.com' };
+  await sandbox.__authCallback(mockUser);
+
+  // After login:
+  if (adminOnlyLinks[0].style.display !== '' || adminOnlyLinks[1].style.display !== '') {
+    throw new Error('Admin links should be visible after login');
+  }
+
+  // Simulate logout
+  await sandbox.__authCallback(null);
+
+  // After logout:
+  if (adminOnlyLinks[0].style.display !== 'none' || adminOnlyLinks[1].style.display !== 'none') {
+    throw new Error('Admin links should be hidden after logout');
+  }
+
+  console.log('✓ Admin page dynamic links visibility toggle works correctly.');
 }
 
 runTest().catch(err => {
