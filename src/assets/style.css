@@ -81,6 +81,7 @@ a:hover { color: var(--ac); }
 .card p { margin: 0; color: var(--tx2); }
 .meta, .tags { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; color: var(--tx3); font-size: 13px; }
 .tag, .visibility { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border: 1px solid var(--bd); border-radius: 999px; background: var(--bg); color: var(--tx2); font-size: 12px; font-weight: 650; }
+.tag:empty { display: none; }
 .visibility { color: var(--ac); background: var(--paper-warm); border-color: color-mix(in srgb, var(--ac), var(--bd) 70%); }
 .card-footer { margin-top: auto; display: flex; justify-content: space-between; align-items: center; color: var(--tx3); font-size: 13px; }
 

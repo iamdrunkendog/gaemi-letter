@@ -39,7 +39,7 @@ function layout({ title, description, body, extraHead = '' }) {
   <div class="header-actions"><a class="icon-button" href="/admin/" title="관리자 페이지" aria-label="관리자 페이지">${loginSvg()}</a><button class="icon-button" id="themeToggle" title="테마 전환" aria-label="테마 전환">◐</button></div>
 </div></header>
 ${body}
-<footer class="site-footer"><div class="footer-inner"><span>개미가 정리해 보내는 작은 문서 배달함</span><span>Firestore → 개미레터</span></div></footer>
+<footer class="site-footer"><div class="footer-inner"><span>개미가 정리해 보내는 작은 문서 배달함</span><span>contact: i.am@gaemi.kim</span></div></footer>
 <script>
 const root = document.documentElement;
 const saved = localStorage.getItem('gaemi-letter-theme');
