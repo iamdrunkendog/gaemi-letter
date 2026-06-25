@@ -14,6 +14,10 @@ function antSvg() {
   return `<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6" r="2.3" stroke="var(--ac)" stroke-width="1.3"/><ellipse cx="10" cy="12" rx="3.2" ry="4" stroke="var(--ac)" stroke-width="1.3"/><path d="M8.6 4.2 6.8 2.6M11.4 4.2l1.8-1.6M7.7 10.3 3.5 8.2M12.3 10.3l4.2-2.1M7.4 12H3M12.6 12H17M7.8 13.6 3.8 16M12.2 13.6l4 2.4" stroke="var(--ac)" stroke-width="1.1" stroke-linecap="round"/></svg>`;
 }
 
+function loginSvg() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 7.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12h10m0 0-3.2-3.2M14 12l-3.2 3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 function layout({ title, description, body, extraHead = '' }) {
   return `<!doctype html>
 <html lang="ko" data-theme="light">
@@ -31,8 +35,8 @@ function layout({ title, description, body, extraHead = '' }) {
 </head>
 <body>
 <header class="site-header"><div class="header-inner">
-  <a class="brand" href="/"><span class="ant-mark">${antSvg()}</span><span>개미레터</span></a>
-  <div class="header-actions"><a class="pill-link" href="/">처음</a><button class="icon-button" id="themeToggle" title="테마 전환" aria-label="테마 전환">◐</button></div>
+  <a class="brand" href="/"><img class="brand-avatar" src="/assets/profile.jpg" alt="개미" width="32" height="32" /><span>개미레터</span></a>
+  <div class="header-actions"><a class="icon-button" href="/admin/" title="관리자 페이지" aria-label="관리자 페이지">${loginSvg()}</a><button class="icon-button" id="themeToggle" title="테마 전환" aria-label="테마 전환">◐</button></div>
 </div></header>
 ${body}
 <footer class="site-footer"><div class="footer-inner"><span>개미가 정리해 보내는 작은 문서 배달함</span><span>Firestore → 개미레터</span></div></footer>
@@ -293,6 +297,8 @@ loadLetter().catch(error => {
 
 await fs.rm(outDir, { recursive: true, force: true });
 await fs.mkdir(outDir, { recursive: true });
+await fs.mkdir(path.join(outDir, 'assets'), { recursive: true });
+await fs.copyFile(path.join('/Users/gaemikim/gaemilog', 'profile.jpg'), path.join(outDir, 'assets', 'profile.jpg'));
 await buildIndex();
 await buildAdminPage();
 await buildLetterViewer();

@@ -58,6 +58,7 @@ a:hover { color: var(--ac); }
 }
 .header-inner { max-width: var(--max); margin: 0 auto; padding: 13px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--tx); text-decoration: none; font-weight: 800; letter-spacing: -.04em; }
+.brand-avatar { width: 32px; height: 32px; border: 1px solid var(--bd); border-radius: 999px; object-fit: cover; background: var(--paper); box-shadow: 0 1px 0 rgba(0,0,0,.03); }
 .ant-mark { width: 28px; height: 28px; border: 1px solid var(--bd); border-radius: 9px; display: grid; place-items: center; background: var(--paper); box-shadow: 0 1px 0 rgba(0,0,0,.03); }
 .header-actions { display: flex; align-items: center; gap: 8px; }
 .icon-button, .copy-button, .pill-link {
