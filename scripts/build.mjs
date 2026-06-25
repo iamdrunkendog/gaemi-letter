@@ -236,6 +236,14 @@ function renderMeta(item) {
 }
 function renderBody(html) {
   bodyEl.innerHTML = html || '<p>본문이 비어 있습니다.</p>';
+  bodyEl.querySelectorAll('table').forEach(table => {
+    if (!table.parentElement.classList.contains('table-wrap')) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'table-wrap';
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    }
+  });
   buildToc();
 }
 function renderPasswordPrompt(item, message = '') {
