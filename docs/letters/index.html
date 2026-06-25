@@ -190,6 +190,7 @@ async function decryptHtml(encryptedBody, password) {
 function buildToc() {
   const headings = [...bodyEl.querySelectorAll('h2, h3')].slice(0, 18);
   if (!headings.length) { tocEl.style.display = 'none'; return; }
+  tocEl.style.display = '';
   headings.forEach((h, i) => { if (!h.id) h.id = 'section-' + i; });
   tocEl.innerHTML = '<strong>Contents</strong>' + headings.map(h => '<a style="padding-left:' + (h.tagName === 'H3' ? '12px' : '0') + '" href="#' + esc(h.id) + '">' + esc(h.textContent) + '</a>').join('');
 }
@@ -203,7 +204,7 @@ function renderBody(html) {
 }
 function renderPasswordPrompt(item, message = '') {
   tocEl.style.display = 'none';
-  bodyEl.innerHTML = '<div class="table-wrap" style="padding:18px"><h2>비밀번호가 필요한 개미레터입니다</h2><p>전달받은 비밀번호를 입력하면 브라우저에서 본문을 복호화합니다.</p><label>비밀번호 <input id="letterPassword" type="password" autocomplete="current-password" style="max-width:320px"></label><div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="copy-button" id="unlockButton">열기</button><span class="tag" id="unlockStatus">' + esc(message) + '</span></div></div>';
+  bodyEl.innerHTML = '<div class="table-wrap" style="padding:18px"><h2>비밀번호 입력</h2><p>전달받은 비밀번호를 입력하면 브라우저에서 본문을 복호화합니다.</p><label>비밀번호 <input id="letterPassword" type="password" autocomplete="current-password" style="max-width:320px"></label><div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="copy-button" id="unlockButton">열기</button><span class="tag" id="unlockStatus">' + esc(message) + '</span></div></div>';
   document.getElementById('unlockButton').addEventListener('click', async () => {
     const status = document.getElementById('unlockStatus');
     const password = document.getElementById('letterPassword').value;
@@ -211,6 +212,10 @@ function renderPasswordPrompt(item, message = '') {
     try {
       const html = await decryptHtml(item.encryptedBody, password);
       status.textContent = '열림';
+      document.title = (item.title || '개미레터') + ' · 개미레터';
+      titleEl.textContent = item.title || slug;
+      descEl.textContent = item.description || '';
+      renderMeta(item);
       renderBody(html);
     } catch (error) {
       status.textContent = '비밀번호가 맞지 않습니다.';
@@ -230,14 +235,24 @@ async function loadLetter() {
   const fields = raw.fields || {};
   const item = Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, v(value)]));
   loadedItem = item;
-  document.title = (item.title || '개미레터') + ' · 개미레터';
-  titleEl.textContent = item.title || slug;
-  descEl.textContent = item.description || '';
-  renderMeta(item);
-  if (item.visibility === 'password') {
+
+  const visibility = item.visibility || 'public';
+  if (visibility === 'private') {
+    throw new Error('접근 권한이 없습니다.');
+  }
+
+  if (visibility === 'password') {
     if (!item.encryptedBody) throw new Error('비밀번호 문서 설정이 잘못되었습니다.');
+    document.title = '개미레터 · 보호 문서';
+    titleEl.textContent = '보호된 개미레터';
+    descEl.textContent = '비밀번호가 필요한 개미레터입니다.';
+    metaEl.innerHTML = '';
     renderPasswordPrompt(item);
   } else {
+    document.title = (item.title || '개미레터') + ' · 개미레터';
+    titleEl.textContent = item.title || slug;
+    descEl.textContent = item.description || '';
+    renderMeta(item);
     renderBody(item.bodyHtml || '<p>본문이 비어 있습니다.</p>');
   }
 }
