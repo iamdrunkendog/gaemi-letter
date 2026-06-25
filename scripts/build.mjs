@@ -18,7 +18,7 @@ function loginSvg() {
   return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 7.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12h10m0 0-3.2-3.2M14 12l-3.2 3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
-function layout({ title, description, body, extraHead = '' }) {
+function layout({ title, description, body, extraHead = '', bodyClass = '' }) {
   return `<!doctype html>
 <html lang="ko" data-theme="light">
 <head>
@@ -33,9 +33,9 @@ function layout({ title, description, body, extraHead = '' }) {
   <style>${style}</style>
   ${extraHead}
 </head>
-<body>
+<body class="${bodyClass}">
 <header class="site-header"><div class="header-inner">
-  <a class="brand" href="/"><img class="brand-avatar" src="/assets/profile.jpg" alt="개미" width="32" height="32" /><span>개미레터</span></a>
+  <span class="brand"><img class="brand-avatar" src="/assets/profile.jpg" alt="개미" width="32" height="32" /><span>개미레터</span></span>
   <div class="header-actions"><a class="icon-button" href="/admin/" title="관리자 페이지" aria-label="관리자 페이지">${loginSvg()}</a><button class="icon-button" id="themeToggle" title="테마 전환" aria-label="테마 전환">◐</button></div>
 </div></header>
 ${body}
@@ -193,7 +193,7 @@ onAuthStateChanged(auth, user => {
 }
 
 async function buildLetterViewer() {
-  const body = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Gaemi Letter</div><h1 id="letterTitle">개미레터를 불러오는 중</h1><p class="article-desc" id="letterDesc">Firestore에서 문서를 가져오고 있습니다.</p><div class="meta" id="letterMeta"></div><div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="copyButton">공유 링크 복사</button><a class="pill-link" href="/">처음으로</a></div></header><article class="article" id="letterBody"><p>잠시만 기다려주세요.</p></article></section><aside class="toc" id="letterToc"><strong>Contents</strong></aside></main>
+  const body = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Gaemi Letter</div><h1 id="letterTitle">개미레터를 불러오는 중</h1><p class="article-desc" id="letterDesc">Firestore에서 문서를 가져오고 있습니다.</p><div class="meta" id="letterMeta"></div><div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="copyButton">공유 링크 복사</button></div></header><article class="article" id="letterBody"><p>잠시만 기다려주세요.</p></article></section><aside class="toc" id="letterToc"><strong>Contents</strong></aside></main>
 <script>window.__gaemiFirebaseConfig = ${firebaseConfig};</script>
 <script type="module">
 ${firebaseImportLines()}
@@ -319,7 +319,7 @@ onAuthStateChanged(auth, user => {
   window.__loadPromise = loadLetter(user);
 });
 </script>`;
-  const html = layout({ title: '개미레터 · 문서', description: '전달받은 링크로 여는 개미레터 문서입니다.', body });
+  const html = layout({ title: '개미레터 · 문서', description: '전달받은 링크로 여는 개미레터 문서입니다.', body, bodyClass: 'is-reader-page' });
   const letterDir = path.join(outDir, 'letters');
   await fs.mkdir(letterDir, { recursive: true });
   await fs.writeFile(path.join(letterDir, 'index.html'), html);
