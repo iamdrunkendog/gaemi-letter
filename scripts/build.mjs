@@ -108,12 +108,176 @@ async function decryptHtml(encryptedBody, password) {
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(encryptedBody.iv) }, key, base64ToBytes(encryptedBody.ciphertext));
   return new TextDecoder().decode(plain);
 }
+function htmlToMarkdown(html) {
+  if (typeof DOMParser === 'undefined') return html;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return '';
+    }
+    
+    const tag = node.tagName.toLowerCase();
+    
+    if (tag === 'table') {
+      const rows = Array.from(node.querySelectorAll('tr'));
+      if (rows.length === 0) return '';
+      let tableMd = '\\n\\n';
+      let headerColsCount = 0;
+      
+      rows.forEach((rowEl, rowIndex) => {
+        const cells = Array.from(rowEl.querySelectorAll('th, td'));
+        if (rowIndex === 0) {
+          headerColsCount = cells.length;
+        }
+        const cellTexts = cells.map(cell => walk(cell).replace(/\\n/g, ' ').trim());
+        tableMd += '| ' + cellTexts.join(' | ') + ' |\\n';
+        if (rowIndex === 0) {
+          tableMd += '| ' + Array(headerColsCount).fill('---').join(' | ') + ' |\\n';
+        }
+      });
+      tableMd += '\\n';
+      return tableMd;
+    }
+    
+    let childrenMarkdown = '';
+    for (const child of node.childNodes) {
+      childrenMarkdown += walk(child);
+    }
+    
+    switch (tag) {
+      case 'h1': return '\\n\\n# ' + childrenMarkdown.trim() + '\\n\\n';
+      case 'h2': return '\\n\\n## ' + childrenMarkdown.trim() + '\\n\\n';
+      case 'h3': return '\\n\\n### ' + childrenMarkdown.trim() + '\\n\\n';
+      case 'h4': return '\\n\\n#### ' + childrenMarkdown.trim() + '\\n\\n';
+      case 'h5': return '\\n\\n##### ' + childrenMarkdown.trim() + '\\n\\n';
+      case 'h6': return '\\n\\n###### ' + childrenMarkdown.trim() + '\\n\\n';
+      case 'p': return '\\n\\n' + childrenMarkdown.trim() + '\\n\\n';
+      case 'br': return '\\n';
+      case 'strong':
+      case 'b': return '**' + childrenMarkdown + '**';
+      case 'em':
+      case 'i': return '*' + childrenMarkdown + '*';
+      case 'code': {
+        if (node.parentNode && node.parentNode.tagName.toLowerCase() === 'pre') {
+          return childrenMarkdown;
+        }
+        return '\`' + node.textContent + '\`';
+      }
+      case 'pre': {
+        return '\\n\\n\`\`\`\\n' + node.textContent.trim() + '\\n\`\`\`\\n\\n';
+      }
+      case 'a': {
+        const href = node.getAttribute('href') || '';
+        return '[' + childrenMarkdown + '](' + href + ')';
+      }
+      case 'img': {
+        const alt = node.getAttribute('alt') || '';
+        const src = node.getAttribute('src') || '';
+        return '![' + alt + '](' + src + ')';
+      }
+      case 'blockquote': {
+        return '\\n\\n' + childrenMarkdown.trim().split('\\n').map(line => '> ' + line).join('\\n') + '\\n\\n';
+      }
+      case 'li': {
+        const isOrdered = node.parentNode && node.parentNode.tagName.toLowerCase() === 'ol';
+        if (isOrdered) {
+          const index = Array.from(node.parentNode.children).indexOf(node) + 1;
+          return '\\n' + index + '. ' + childrenMarkdown.trim();
+        } else {
+          return '\\n- ' + childrenMarkdown.trim();
+        }
+      }
+      case 'ul':
+      case 'ol': {
+        return '\\n' + childrenMarkdown.trim() + '\\n';
+      }
+      case 'hr': return '\\n\\n---\\n\\n';
+      default:
+        return childrenMarkdown;
+    }
+  }
+  
+  let markdown = walk(doc.body);
+  markdown = markdown.replace(/\\n{3,}/g, '\\n\\n').trim();
+  return markdown;
+}
+function buildMarkdownExport(item, bodyMarkdown) {
+  const frontmatterParts = [];
+  frontmatterParts.push('---');
+  frontmatterParts.push('title: ' + JSON.stringify(item.title || ''));
+  frontmatterParts.push('date: ' + JSON.stringify(item.date || ''));
+  frontmatterParts.push('slug: ' + JSON.stringify(item.slug || item.id));
+  frontmatterParts.push('visibility: ' + JSON.stringify(item.visibility || 'public'));
+  if (item.tags && item.tags.length > 0) {
+    frontmatterParts.push('tags:');
+    item.tags.forEach(t => frontmatterParts.push('  - ' + t));
+  }
+  if (item.description) {
+    frontmatterParts.push('description: ' + JSON.stringify(item.description));
+  }
+  frontmatterParts.push('---');
+  return frontmatterParts.join('\\n') + '\\n\\n' + bodyMarkdown;
+}
+function safeFileName(item) {
+  const date = item.date || '';
+  const slug = item.slug || item.id || '';
+  let base = (date ? date + '-' : '') + slug;
+  base = base.replace(/[\\/:*?"<>|]/g, '_');
+  base = base.trim().replace(/\\s+/g, '_');
+  return (base || 'letter') + '.md';
+}
+function downloadTextFile(text, fileName) {
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+async function exportMarkdown(id, rootEl) {
+  const item = currentItems.find(x => x.id === id);
+  const status = rootEl.querySelector('[data-role="status"]');
+  status.textContent = '내보내는 중...';
+  try {
+    let markdown = '';
+    if (item.bodyMarkdown) {
+      markdown = item.bodyMarkdown;
+    } else if (item.bodyHtml) {
+      markdown = htmlToMarkdown(item.bodyHtml);
+    } else if (item.encryptedBody) {
+      const password = rootEl.querySelector('[data-role="password"]').value;
+      if (!password) {
+        throw new Error('비밀번호를 입력해야 합니다.');
+      }
+      const decryptedHtml = await decryptHtml(item.encryptedBody, password);
+      markdown = htmlToMarkdown(decryptedHtml);
+    } else {
+      throw new Error('내보낼 본문 데이터가 없습니다.');
+    }
+    
+    const fullMarkdown = buildMarkdownExport(item, markdown);
+    const fileName = safeFileName(item);
+    downloadTextFile(fullMarkdown, fileName);
+    status.textContent = '내보내기 완료';
+  } catch (error) {
+    status.textContent = '오류: ' + error.message;
+  }
+}
 function row(item) {
   const id = esc(item.id);
   const slug = esc(item.slug || item.id);
   const visibility = item.visibility || 'public';
   const canEncrypt = Boolean(item.bodyHtml || item.encryptedBody);
-  return '<tr data-id="' + id + '"><td><span class="admin-date">' + esc(item.date || '') + '</span></td><td><div class="admin-title-wrap"><a class="admin-title-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">' + esc(item.title || item.id) + '</a><span class="admin-slug">' + slug + '</span></div></td><td><select data-role="visibility"><option value="public" ' + (visibility === 'public' || visibility === 'link-only' ? 'selected' : '') + '>공개 (링크)</option><option value="private" ' + (visibility === 'private' ? 'selected' : '') + '>비공개</option><option value="password" ' + (visibility === 'password' ? 'selected' : '') + '>비밀번호</option></select></td><td><input data-role="password" type="password" placeholder="비밀번호" autocomplete="new-password"></td><td><div class="admin-desc">' + esc(item.description || '') + '</div><div class="admin-tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div></td><td><div class="admin-actions"><button class="copy-button" data-role="save" ' + (canEncrypt ? '' : 'disabled') + '>저장</button><a class="pill-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">열기</a><button class="copy-button" data-role="copy">복사</button><span class="admin-status" data-role="status"></span></div></td></tr>';
+  return '<tr data-id="' + id + '"><td><span class="admin-date">' + esc(item.date || '') + '</span></td><td><div class="admin-title-wrap"><a class="admin-title-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">' + esc(item.title || item.id) + '</a><span class="admin-slug">' + slug + '</span></div></td><td><select data-role="visibility"><option value="public" ' + (visibility === 'public' || visibility === 'link-only' ? 'selected' : '') + '>공개 (링크)</option><option value="private" ' + (visibility === 'private' ? 'selected' : '') + '>비공개</option><option value="password" ' + (visibility === 'password' ? 'selected' : '') + '>비밀번호</option></select></td><td><input data-role="password" type="password" placeholder="비밀번호" autocomplete="new-password"></td><td><div class="admin-desc">' + esc(item.description || '') + '</div><div class="admin-tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div></td><td><div class="admin-actions"><button class="copy-button" data-role="save" ' + (canEncrypt ? '' : 'disabled') + '>저장</button><a class="pill-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">열기</a><button class="copy-button" data-role="copy">복사</button><button class="copy-button" data-role="export">MD</button><span class="admin-status" data-role="status"></span></div></td></tr>';
 }
 async function saveItem(id, rootEl) {
   const item = currentItems.find(x => x.id === id);
@@ -168,6 +332,10 @@ async function loadLetters(user) {
       const item = currentItems.find(x => x.id === rootEl.dataset.id);
       await navigator.clipboard.writeText(location.origin + '/letters/' + (item.slug || item.id) + '/');
       rootEl.querySelector('[data-role="status"]').textContent = '링크 복사됨';
+    }));
+    list.querySelectorAll('[data-role="export"]').forEach(button => button.addEventListener('click', async event => {
+      const rootEl = event.currentTarget.closest('[data-id]');
+      await exportMarkdown(rootEl.dataset.id, rootEl);
     }));
   } catch (error) {
     notice.textContent = '목록을 불러오지 못했습니다. 관리자 권한이 없거나 설정을 확인해야 합니다.';
