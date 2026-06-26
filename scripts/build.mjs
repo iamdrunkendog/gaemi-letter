@@ -39,7 +39,7 @@ function layout({ title, description, body, extraHead = '', bodyClass = '' }) {
   <div class="header-actions"><a class="icon-button" href="/admin/" title="관리자 페이지" aria-label="관리자 페이지">${loginSvg()}</a><button class="icon-button" id="themeToggle" title="테마 전환" aria-label="테마 전환">◐</button></div>
 </div></header>
 ${body}
-<footer class="site-footer"><div class="footer-inner"><span>개미가 정리해 보내는 작은 문서 배달함</span><span>contact: i.am@gaemi.kim</span></div></footer>
+<footer class="site-footer"><div class="footer-inner"><span>개미가 정리해 보내는 작은 문서 배달함</span><span>링크로만 전달되는 문서함</span></div></footer>
 <script>
 const root = document.documentElement;
 const saved = localStorage.getItem('gaemi-letter-theme');
@@ -108,12 +108,12 @@ async function decryptHtml(encryptedBody, password) {
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(encryptedBody.iv) }, key, base64ToBytes(encryptedBody.ciphertext));
   return new TextDecoder().decode(plain);
 }
-function card(item) {
+function row(item) {
   const id = esc(item.id);
   const slug = esc(item.slug || item.id);
   const visibility = item.visibility || 'public';
   const canEncrypt = Boolean(item.bodyHtml || item.encryptedBody);
-  return '<div class="card" style="margin-bottom:14px" data-id="' + id + '"><div class="meta"><span>' + esc(item.date || '') + '</span><span class="visibility">' + esc(visibility) + '</span></div><h2>' + esc(item.title || item.id) + '</h2><p>' + esc(item.description || '') + '</p><div class="tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div><div class="table-wrap" style="padding:12px;margin-top:12px"><label>공개여부 <select data-role="visibility"><option value="public" ' + (visibility === 'public' || visibility === 'link-only' ? 'selected' : '') + '>공개: 링크 가진 모든 사용자</option><option value="private" ' + (visibility === 'private' ? 'selected' : '') + '>비공개: 관리자만</option><option value="password" ' + (visibility === 'password' ? 'selected' : '') + '>비밀번호</option></select></label><br><label>비밀번호 <input data-role="password" type="password" placeholder="비밀번호 모드로 바꿀 때 입력" autocomplete="new-password" style="max-width:280px"></label><p style="font-size:13px;color:var(--muted);margin:8px 0 0">비밀번호 설정 시 본문은 브라우저에서 AES-GCM으로 암호화되고 Firestore 평문 본문은 삭제됩니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="copy-button" data-role="save" ' + (canEncrypt ? '' : 'disabled') + '>저장</button><a class="pill-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">열기</a><button class="copy-button" data-role="copy">링크 복사</button><span class="tag" data-role="status"></span></div></div><div class="card-footer"><span>' + slug + '</span></div></div>';
+  return '<tr data-id="' + id + '"><td><span class="admin-date">' + esc(item.date || '') + '</span></td><td><div class="admin-title-wrap"><a class="admin-title-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">' + esc(item.title || item.id) + '</a><span class="admin-slug">' + slug + '</span></div></td><td><select data-role="visibility"><option value="public" ' + (visibility === 'public' || visibility === 'link-only' ? 'selected' : '') + '>공개 (링크)</option><option value="private" ' + (visibility === 'private' ? 'selected' : '') + '>비공개</option><option value="password" ' + (visibility === 'password' ? 'selected' : '') + '>비밀번호</option></select></td><td><input data-role="password" type="password" placeholder="비밀번호" autocomplete="new-password"></td><td><div class="admin-desc">' + esc(item.description || '') + '</div><div class="admin-tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div></td><td><div class="admin-actions"><button class="copy-button" data-role="save" ' + (canEncrypt ? '' : 'disabled') + '>저장</button><a class="pill-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">열기</a><button class="copy-button" data-role="copy">복사</button><span class="admin-status" data-role="status"></span></div></td></tr>';
 }
 async function saveItem(id, rootEl) {
   const item = currentItems.find(x => x.id === id);
@@ -157,7 +157,7 @@ async function loadLetters(user) {
     currentItems = [];
     snap.forEach(docSnap => currentItems.push({ id: docSnap.id, ...docSnap.data() }));
     notice.textContent = currentItems.length ? '총 ' + currentItems.length + '개 레터' : '아직 등록된 레터가 없습니다.';
-    list.innerHTML = currentItems.map(card).join('');
+    list.innerHTML = '<div class="table-wrap"><table class="admin-table"><thead><tr><th>날짜</th><th>제목 / 슬러그</th><th>공개설정</th><th>비밀번호</th><th>설명 및 태그</th><th>관리</th></tr></thead><tbody>' + currentItems.map(row).join('') + '</tbody></table></div><p class="admin-note">💡 <b>안내:</b> 비밀번호 설정 시 본문은 브라우저에서 AES-GCM으로 암호화되고 Firestore 평문 본문은 삭제됩니다. 암호화 문서를 공개/비공개로 바꿀 때는 현재 비밀번호를 입력해야 복호화되어 저장됩니다.</p>';
     list.querySelectorAll('[data-role="save"]').forEach(button => button.addEventListener('click', async event => {
       const rootEl = event.currentTarget.closest('[data-id]');
       try { await saveItem(rootEl.dataset.id, rootEl); }

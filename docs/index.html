@@ -140,6 +140,117 @@ table { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 15p
 th, td { padding: 12px 14px; border-bottom: 1px solid var(--bd); vertical-align: top; }
 th { text-align: left; color: var(--tx); background: var(--bg-soft); font-weight: 750; }
 tr:last-child td { border-bottom: 0; }
+
+/* Admin list table custom styling */
+.admin-table {
+  min-width: 800px;
+}
+.admin-table th, .admin-table td {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+.admin-table th {
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+.admin-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--tx2);
+  white-space: nowrap;
+}
+.admin-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.admin-title-link {
+  font-weight: 700;
+  color: var(--tx);
+  text-decoration: none;
+  font-size: 14px;
+}
+.admin-title-link:hover {
+  color: var(--ac);
+  text-decoration: underline;
+}
+.admin-slug {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--tx3);
+}
+.admin-table select {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--tx);
+  width: 100%;
+  min-width: 105px;
+  cursor: pointer;
+}
+.admin-table select:focus,
+.admin-table input[type="password"]:focus {
+  outline: none;
+  border-color: var(--ac);
+}
+.admin-table input[type="password"] {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--tx);
+  width: 100%;
+  max-width: 120px;
+}
+.admin-desc {
+  font-size: 13px;
+  color: var(--tx2);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.admin-tags .tag {
+  height: 20px;
+  font-size: 11px;
+  padding: 0 6px;
+}
+.admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-actions .copy-button,
+.admin-actions .pill-link {
+  min-height: 28px;
+  height: 28px;
+  font-size: 12px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+.admin-status {
+  font-size: 11px;
+  color: var(--ac);
+  font-weight: 700;
+}
+.admin-note {
+  font-size: 13px;
+  color: var(--tx2);
+  margin-top: 12px;
+  line-height: 1.5;
+}
 .article hr { border: 0; border-top: 1px solid var(--bd); margin: 36px 0; }
 .article img { max-width: 100%; border-radius: 16px; border: 1px solid var(--bd); }
 .article input[type='checkbox'] { transform: translateY(1px); margin-right: 7px; }
@@ -243,7 +354,7 @@ tr:last-child td { border-bottom: 0; }
   <div class="header-actions"><a class="icon-button" href="/admin/" title="관리자 페이지" aria-label="관리자 페이지"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 7.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12h10m0 0-3.2-3.2M14 12l-3.2 3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a><button class="icon-button" id="themeToggle" title="테마 전환" aria-label="테마 전환">◐</button></div>
 </div></header>
 <main><section class="hero"><div class="eyebrow">Gaemi Letter</div><h1>전달받은 링크로만 열리는 개미레터</h1><p>문서 목록은 공개하지 않습니다. 개별 레터는 공유받은 전용 링크로만 접근할 수 있습니다.</p></section><section class="letter-grid"><div class="card"><div class="meta"><span class="visibility">link-only</span></div><h2>목록 비공개</h2><p>개미레터는 검색과 목록 탐색을 막고, 필요한 사람에게만 개별 링크를 전달하는 방식으로 운영합니다.</p><div class="card-footer"><span>링크를 받은 문서만 열어주세요.</span></div></div></section></main>
-<footer class="site-footer"><div class="footer-inner"><span>개미가 정리해 보내는 작은 문서 배달함</span><span>contact: i.am@gaemi.kim</span></div></footer>
+<footer class="site-footer"><div class="footer-inner"><span>개미가 정리해 보내는 작은 문서 배달함</span><span>링크로만 전달되는 문서함</span></div></footer>
 <script>
 const root = document.documentElement;
 const saved = localStorage.getItem('gaemi-letter-theme');

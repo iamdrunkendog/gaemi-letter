@@ -129,6 +129,117 @@ table { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 15p
 th, td { padding: 12px 14px; border-bottom: 1px solid var(--bd); vertical-align: top; }
 th { text-align: left; color: var(--tx); background: var(--bg-soft); font-weight: 750; }
 tr:last-child td { border-bottom: 0; }
+
+/* Admin list table custom styling */
+.admin-table {
+  min-width: 800px;
+}
+.admin-table th, .admin-table td {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+.admin-table th {
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+.admin-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--tx2);
+  white-space: nowrap;
+}
+.admin-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.admin-title-link {
+  font-weight: 700;
+  color: var(--tx);
+  text-decoration: none;
+  font-size: 14px;
+}
+.admin-title-link:hover {
+  color: var(--ac);
+  text-decoration: underline;
+}
+.admin-slug {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--tx3);
+}
+.admin-table select {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--tx);
+  width: 100%;
+  min-width: 105px;
+  cursor: pointer;
+}
+.admin-table select:focus,
+.admin-table input[type="password"]:focus {
+  outline: none;
+  border-color: var(--ac);
+}
+.admin-table input[type="password"] {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--tx);
+  width: 100%;
+  max-width: 120px;
+}
+.admin-desc {
+  font-size: 13px;
+  color: var(--tx2);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.admin-tags .tag {
+  height: 20px;
+  font-size: 11px;
+  padding: 0 6px;
+}
+.admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-actions .copy-button,
+.admin-actions .pill-link {
+  min-height: 28px;
+  height: 28px;
+  font-size: 12px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+.admin-status {
+  font-size: 11px;
+  color: var(--ac);
+  font-weight: 700;
+}
+.admin-note {
+  font-size: 13px;
+  color: var(--tx2);
+  margin-top: 12px;
+  line-height: 1.5;
+}
 .article hr { border: 0; border-top: 1px solid var(--bd); margin: 36px 0; }
 .article img { max-width: 100%; border-radius: 16px; border: 1px solid var(--bd); }
 .article input[type='checkbox'] { transform: translateY(1px); margin-right: 7px; }
