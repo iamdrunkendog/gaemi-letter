@@ -74,7 +74,7 @@ async function buildIndex() {
 }
 
 async function buildAdminPage() {
-  const adminBody = `<main class="page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 권한이 있는 Google 계정으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section><aside class="toc"><strong>Admin</strong><a href="/">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer" class="admin-only" style="display:none">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer" class="admin-only" style="display:none">Firestore Console</a></aside></main>
+  const adminBody = `<main class="page admin-page"><section class="article-shell"><header class="article-head"><div class="eyebrow">Private Admin</div><h1>개미레터 관리자 목록</h1><p class="article-desc">관리자 권한이 있는 Google 계정으로 로그인하면 문서 목록과 공개여부를 관리할 수 있습니다.</p><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="copy-button" id="loginButton">Google로 로그인</button><button class="copy-button" id="logoutButton" style="display:none">로그아웃</button><span class="tag" id="authState">로그인 전</span><a href="/" class="pill-link">공개 랜딩</a><a href="https://console.firebase.google.com/project/gaemi-letter/authentication/users" target="_blank" rel="noreferrer" class="admin-only" style="display:none">Auth Users</a><a href="https://console.firebase.google.com/project/gaemi-letter/firestore/databases/-default-/data" target="_blank" rel="noreferrer" class="admin-only" style="display:none">Firestore Console</a></div></header><article class="article"><div id="adminNotice" class="table-wrap" style="padding:16px">로그인이 필요합니다.</div><div id="letterList"></div></article></section></main>
 ${firebaseConfigScript()}
 <script type="module">
 ${firebaseImportLines()}
@@ -87,6 +87,8 @@ const authState = document.getElementById('authState');
 const notice = document.getElementById('adminNotice');
 const list = document.getElementById('letterList');
 let currentItems = [];
+let currentPage = 1;
+const pageSize = 10;
 function esc(s='') { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function bytesToBase64(bytes) { return btoa(String.fromCharCode(...bytes)); }
 function base64ToBytes(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
@@ -277,7 +279,14 @@ function row(item) {
   const slug = esc(item.slug || item.id);
   const visibility = item.visibility || 'public';
   const canEncrypt = Boolean(item.bodyHtml || item.encryptedBody);
-  return '<tr data-id="' + id + '"><td><span class="admin-date">' + esc(item.date || '') + '</span></td><td><div class="admin-title-wrap"><a class="admin-title-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">' + esc(item.title || item.id) + '</a><span class="admin-slug">' + slug + '</span></div></td><td><select data-role="visibility"><option value="public" ' + (visibility === 'public' || visibility === 'link-only' ? 'selected' : '') + '>공개 (링크)</option><option value="private" ' + (visibility === 'private' ? 'selected' : '') + '>비공개</option><option value="password" ' + (visibility === 'password' ? 'selected' : '') + '>비밀번호</option></select></td><td><input data-role="password" type="password" placeholder="비밀번호" autocomplete="new-password"></td><td><div class="admin-desc">' + esc(item.description || '') + '</div><div class="admin-tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div></td><td><div class="admin-actions"><button class="copy-button" data-role="save" ' + (canEncrypt ? '' : 'disabled') + '>저장</button><a class="pill-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">열기</a><button class="copy-button" data-role="copy">복사</button><button class="copy-button" data-role="export">MD</button><span class="admin-status" data-role="status"></span></div></td></tr>';
+  return '<div class="admin-list-row" data-id="' + id + '">' +
+    '<div class="col-date" data-label="날짜"><span class="admin-date">' + esc(item.date || '') + '</span></div>' +
+    '<div class="col-title" data-label="제목 / 슬러그"><div class="admin-title-wrap"><a class="admin-title-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">' + esc(item.title || item.id) + '</a><span class="admin-slug">' + slug + '</span></div></div>' +
+    '<div class="col-visibility" data-label="공개설정"><select data-role="visibility"><option value="public" ' + (visibility === 'public' || visibility === 'link-only' ? 'selected' : '') + '>공개 (링크)</option><option value="private" ' + (visibility === 'private' ? 'selected' : '') + '>비공개</option><option value="password" ' + (visibility === 'password' ? 'selected' : '') + '>비밀번호</option></select></div>' +
+    '<div class="col-password" data-label="비밀번호"><input data-role="password" type="password" placeholder="비밀번호" autocomplete="new-password"></div>' +
+    '<div class="col-desc" data-label="설명 및 태그"><div class="admin-desc" title="' + esc(item.description || '') + '">' + esc(item.description || '') + '</div><div class="admin-tags">' + (item.tags || []).map(t => '<span class="tag">#' + esc(t) + '</span>').join('') + '</div></div>' +
+    '<div class="col-actions" data-label="관리"><div class="admin-actions"><button class="copy-button" data-role="save" ' + (canEncrypt ? '' : 'disabled') + '>저장</button><a class="pill-link" href="/letters/' + slug + '/" target="_blank" rel="noreferrer">열기</a><button class="copy-button" data-role="copy">복사</button><button class="copy-button" data-role="export">MD</button><span class="admin-status" data-role="status"></span></div></div>' +
+    '</div>';
 }
 async function saveItem(id, rootEl) {
   const item = currentItems.find(x => x.id === id);
@@ -309,6 +318,80 @@ async function saveItem(id, rootEl) {
   status.textContent = '저장됨';
   await loadLetters(auth.currentUser);
 }
+function renderLettersPage() {
+  if (!currentItems.length) {
+    list.innerHTML = '';
+    return;
+  }
+  const totalPages = Math.ceil(currentItems.length / pageSize);
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+  const startIdx = (currentPage - 1) * pageSize;
+  const endIdx = Math.min(startIdx + pageSize, currentItems.length);
+  const pageItems = currentItems.slice(startIdx, endIdx);
+
+  let html = '<div class="admin-list">' +
+    '<div class="admin-list-header">' +
+      '<div>날짜</div>' +
+      '<div>제목 / 슬러그</div>' +
+      '<div>공개설정</div>' +
+      '<div>비밀번호</div>' +
+      '<div>설명 및 태그</div>' +
+      '<div>관리</div>' +
+    '</div>' +
+    pageItems.map(row).join('') +
+    '</div>';
+
+  const hasPrev = currentPage > 1;
+  const hasNext = currentPage < totalPages;
+  html += '<div class="admin-pagination">' +
+    '<button class="copy-button" id="prevPageBtn" ' + (hasPrev ? '' : 'disabled') + '>이전</button>' +
+    '<span class="pagination-info">' + (startIdx + 1) + '–' + endIdx + ' / ' + currentItems.length + ' (페이지 ' + currentPage + ' / ' + totalPages + ')</span>' +
+    '<button class="copy-button" id="nextPageBtn" ' + (hasNext ? '' : 'disabled') + '>다음</button>' +
+  '</div>';
+
+  html += '<p class="admin-note">💡 <b>안내:</b> 비밀번호 설정 시 본문은 브라우저에서 AES-GCM으로 암호화되고 Firestore 평문 본문은 삭제됩니다. 암호화 문서를 공개/비공개로 바꿀 때는 현재 비밀번호를 입력해야 복호화되어 저장됩니다.</p>';
+  list.innerHTML = html;
+  bindLetterActions();
+}
+
+function bindLetterActions() {
+  const prevBtn = document.getElementById('prevPageBtn');
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderLettersPage();
+      }
+    });
+  }
+  const nextBtn = document.getElementById('nextPageBtn');
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      const totalPages = Math.ceil(currentItems.length / pageSize);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderLettersPage();
+      }
+    });
+  }
+  list.querySelectorAll('[data-role="save"]').forEach(button => button.addEventListener('click', async event => {
+    const rootEl = event.currentTarget.closest('[data-id]');
+    try { await saveItem(rootEl.dataset.id, rootEl); }
+    catch (error) { rootEl.querySelector('[data-role="status"]').textContent = '오류: ' + error.message; }
+  }));
+  list.querySelectorAll('[data-role="copy"]').forEach(button => button.addEventListener('click', async event => {
+    const rootEl = event.currentTarget.closest('[data-id]');
+    const item = currentItems.find(x => x.id === rootEl.dataset.id);
+    await navigator.clipboard.writeText(location.origin + '/letters/' + (item.slug || item.id) + '/');
+    rootEl.querySelector('[data-role="status"]').textContent = '링크 복사됨';
+  }));
+  list.querySelectorAll('[data-role="export"]').forEach(button => button.addEventListener('click', async event => {
+    const rootEl = event.currentTarget.closest('[data-id]');
+    await exportMarkdown(rootEl.dataset.id, rootEl);
+  }));
+}
+
 async function loadLetters(user) {
   if (!user) {
     notice.textContent = '로그인이 필요합니다.';
@@ -321,22 +404,7 @@ async function loadLetters(user) {
     currentItems = [];
     snap.forEach(docSnap => currentItems.push({ id: docSnap.id, ...docSnap.data() }));
     notice.textContent = currentItems.length ? '총 ' + currentItems.length + '개 레터' : '아직 등록된 레터가 없습니다.';
-    list.innerHTML = '<div class="table-wrap"><table class="admin-table"><thead><tr><th>날짜</th><th>제목 / 슬러그</th><th>공개설정</th><th>비밀번호</th><th>설명 및 태그</th><th>관리</th></tr></thead><tbody>' + currentItems.map(row).join('') + '</tbody></table></div><p class="admin-note">💡 <b>안내:</b> 비밀번호 설정 시 본문은 브라우저에서 AES-GCM으로 암호화되고 Firestore 평문 본문은 삭제됩니다. 암호화 문서를 공개/비공개로 바꿀 때는 현재 비밀번호를 입력해야 복호화되어 저장됩니다.</p>';
-    list.querySelectorAll('[data-role="save"]').forEach(button => button.addEventListener('click', async event => {
-      const rootEl = event.currentTarget.closest('[data-id]');
-      try { await saveItem(rootEl.dataset.id, rootEl); }
-      catch (error) { rootEl.querySelector('[data-role="status"]').textContent = '오류: ' + error.message; }
-    }));
-    list.querySelectorAll('[data-role="copy"]').forEach(button => button.addEventListener('click', async event => {
-      const rootEl = event.currentTarget.closest('[data-id]');
-      const item = currentItems.find(x => x.id === rootEl.dataset.id);
-      await navigator.clipboard.writeText(location.origin + '/letters/' + (item.slug || item.id) + '/');
-      rootEl.querySelector('[data-role="status"]').textContent = '링크 복사됨';
-    }));
-    list.querySelectorAll('[data-role="export"]').forEach(button => button.addEventListener('click', async event => {
-      const rootEl = event.currentTarget.closest('[data-id]');
-      await exportMarkdown(rootEl.dataset.id, rootEl);
-    }));
+    renderLettersPage();
   } catch (error) {
     notice.textContent = '목록을 불러오지 못했습니다. 관리자 권한이 없거나 설정을 확인해야 합니다.';
   }
