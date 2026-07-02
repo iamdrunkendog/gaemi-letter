@@ -515,6 +515,37 @@ function renderMeta(item) {
 }
 function renderBody(html) {
   bodyEl.innerHTML = html || '<p>본문이 비어 있습니다.</p>';
+  const walk = (node) => {
+    const ignoredTags = ['code', 'pre', 'script', 'style', 'textarea'];
+    if (node.nodeType === 1) {
+      if (ignoredTags.includes(node.tagName.toLowerCase())) {
+        return;
+      }
+      const children = Array.from(node.childNodes);
+      for (const child of children) {
+        walk(child);
+      }
+    } else if (node.nodeType === 3) {
+      const text = node.textContent;
+      if (text.includes('**')) {
+        const parts = text.split(/(\*\*(?:(?!\*\*).)+?\*\*)/);
+        if (parts.length > 1) {
+          const fragment = document.createDocumentFragment();
+          for (let i = 0; i < parts.length; i++) {
+            if (i % 2 === 1) {
+              const strong = document.createElement('strong');
+              strong.textContent = parts[i].slice(2, -2);
+              fragment.appendChild(strong);
+            } else if (parts[i]) {
+              fragment.appendChild(document.createTextNode(parts[i]));
+            }
+          }
+          node.parentNode.replaceChild(fragment, node);
+        }
+      }
+    }
+  };
+  walk(bodyEl);
   bodyEl.querySelectorAll('table').forEach(table => {
     if (!table.parentElement.classList.contains('table-wrap')) {
       const wrapper = document.createElement('div');

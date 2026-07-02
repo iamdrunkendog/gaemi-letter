@@ -5,23 +5,146 @@ import vm from 'node:vm';
 const root = process.cwd();
 const viewerHtmlPath = path.join(root, 'docs', 'letters', 'index.html');
 
+function parseHtml(html) {
+  const regex = /(<\/?[a-zA-Z0-9]+(?:\s+[^>]+)?>)|([^<]+)/g;
+  let match;
+  const root = { childNodes: [] };
+  let current = root;
+  const stack = [root];
+
+  while ((match = regex.exec(html)) !== null) {
+    if (match[1]) {
+      const tagToken = match[1];
+      if (tagToken.startsWith('</')) {
+        stack.pop();
+        current = stack[stack.length - 1] || root;
+      } else {
+        const tagName = tagToken.match(/<([a-zA-Z0-9]+)/)[1];
+        const node = new MockElement(tagName);
+        node.openTag = tagToken;
+        current.childNodes.push(node);
+        node.parentNode = current;
+        
+        const isVoid = ['input', 'br', 'img', 'hr', 'meta', 'link'].includes(tagName.toLowerCase()) || tagToken.endsWith('/>');
+        if (!isVoid) {
+          stack.push(node);
+          current = node;
+        }
+      }
+    } else if (match[2]) {
+      const text = match[2];
+      const node = new MockElement('#text', text);
+      current.childNodes.push(node);
+      node.parentNode = current;
+    }
+  }
+  return root.childNodes;
+}
+
 class MockElement {
-  constructor(id) {
-    this.id = id;
-    this._textContent = '';
-    this._innerHTML = '';
+  constructor(tagOrId, textContent = '') {
+    if (tagOrId === '#text') {
+      this.nodeType = 3;
+      this.nodeName = '#text';
+    } else if (tagOrId === '#document-fragment') {
+      this.nodeType = 11;
+      this.nodeName = '#document-fragment';
+    } else {
+      this.nodeType = 1;
+      this.nodeName = tagOrId;
+      this.tagName = tagOrId.toUpperCase();
+      this.id = tagOrId;
+    }
+    this.openTag = null;
+    this._textContent = textContent;
+    this.childNodes = [];
+    this.parentNode = null;
     this.style = { display: '' };
     this.listeners = {};
   }
-  get textContent() { return this._textContent; }
-  set textContent(val) { this._textContent = val; }
-  get innerHTML() { return this._innerHTML; }
-  set innerHTML(val) { this._innerHTML = val; }
+
+  get textContent() {
+    if (this.nodeType === 3) {
+      return this._textContent;
+    }
+    return this.childNodes.map(c => c.textContent).join('');
+  }
+
+  set textContent(val) {
+    if (this.nodeType === 3) {
+      this._textContent = val;
+    } else {
+      this.childNodes = [new MockElement('#text', val)];
+      this.childNodes[0].parentNode = this;
+    }
+  }
+
+  get innerHTML() {
+    if (this.nodeType === 3) {
+      return this._textContent;
+    }
+    return this.childNodes.map(c => {
+      if (c.nodeType === 3) return c._textContent;
+      const tag = c.tagName.toLowerCase();
+      const open = c.openTag || `<${tag}>`;
+      const isVoid = ['input', 'br', 'img', 'hr', 'meta', 'link'].includes(tag);
+      if (isVoid) {
+        return open;
+      }
+      return `${open}${c.innerHTML}</${tag}>`;
+    }).join('');
+  }
+
+  set innerHTML(html) {
+    this.childNodes = parseHtml(html);
+    this.childNodes.forEach(c => c.parentNode = this);
+  }
+
+  appendChild(child) {
+    if (child.nodeType === 11) {
+      const children = [...child.childNodes];
+      children.forEach(c => {
+        c.parentNode = this;
+        this.childNodes.push(c);
+      });
+      child.childNodes = [];
+    } else {
+      child.parentNode = this;
+      this.childNodes.push(child);
+    }
+  }
+
+  replaceChild(newChild, oldChild) {
+    const idx = this.childNodes.indexOf(oldChild);
+    if (idx !== -1) {
+      if (newChild.nodeType === 11) {
+        const toInsert = [...newChild.childNodes];
+        toInsert.forEach(c => c.parentNode = this);
+        this.childNodes.splice(idx, 1, ...toInsert);
+        newChild.childNodes = [];
+      } else {
+        newChild.parentNode = this;
+        this.childNodes[idx] = newChild;
+      }
+    }
+  }
+
   addEventListener(event, callback) {
     this.listeners[event] = callback;
   }
+
   querySelectorAll(selector) {
-    return [];
+    const results = [];
+    const walk = (node) => {
+      if (node.nodeType === 1) {
+        if (node.tagName.toLowerCase() === selector.toLowerCase() || (selector.startsWith('.') && node.className === selector.slice(1))) {
+          results.push(node);
+        }
+        node.childNodes.forEach(walk);
+      }
+    };
+    this.childNodes.forEach(walk);
+    return results;
   }
 }
 
@@ -62,6 +185,11 @@ async function runTest() {
       window: {
         __gaemiFirebaseConfig: { projectId: 'test-project', apiKey: 'test-key' }
       },
+      Node: {
+        ELEMENT_NODE: 1,
+        TEXT_NODE: 3,
+        DOCUMENT_FRAGMENT_NODE: 11
+      },
       document: {
         title: '개미레터 · 문서',
         documentElement: { dataset: {} },
@@ -73,6 +201,15 @@ async function runTest() {
         },
         querySelectorAll(selector) {
           return [];
+        },
+        createElement(tagName) {
+          return new MockElement(tagName);
+        },
+        createTextNode(text) {
+          return new MockElement('#text', text);
+        },
+        createDocumentFragment() {
+          return new MockElement('#document-fragment');
         }
       },
       location: {
@@ -313,6 +450,54 @@ async function runTest() {
       }
 
       console.log('✓ Private letter hides metadata initially and renders correctly after successful auth.');
+    }
+  });
+
+  // 4c. Test Korean-adjacent bold markdown conversion on reader page
+  await testCase({
+    slug: 'korean-bold-letter',
+    mockGetDoc: async () => ({
+      exists: () => true,
+      data: () => ({
+        title: 'Korean Bold Letter Title',
+        description: 'Korean Bold Letter Description',
+        visibility: 'public',
+        bodyHtml: '<p>SK하이닉스는 **+296,000원(+11.29%)**이야.</p><p>multiple **bold1** and **bold2** here</p>'
+      })
+    }),
+    testFn: async (sandbox, elements) => {
+      const html = elements.letterBody.innerHTML;
+      if (!html.includes('<strong>+296,000원(+11.29%)</strong>')) {
+        throw new Error(`Korean-adjacent bold was not converted. Got HTML: ${html}`);
+      }
+      if (!html.includes('<strong>bold1</strong>') || !html.includes('<strong>bold2</strong>')) {
+        throw new Error(`Multiple bold spans failed. Got HTML: ${html}`);
+      }
+      console.log('✓ Korean-adjacent bold and multiple bold spans are converted correctly.');
+    }
+  });
+
+  // 4d. Test code/pre non-conversion case
+  await testCase({
+    slug: 'code-no-convert-letter',
+    mockGetDoc: async () => ({
+      exists: () => true,
+      data: () => ({
+        title: 'Code Letter Title',
+        description: 'Code Letter Description',
+        visibility: 'public',
+        bodyHtml: '<p>Some **bold** here but <code>**not bold**</code> inside code, and <pre><code>**pre code**</code></pre> too.</p>'
+      })
+    }),
+    testFn: async (sandbox, elements) => {
+      const html = elements.letterBody.innerHTML;
+      if (!html.includes('<strong>bold</strong>')) {
+        throw new Error(`Standard bold was not converted. Got HTML: ${html}`);
+      }
+      if (html.includes('<strong>not bold</strong>') || html.includes('<strong>pre code</strong>')) {
+        throw new Error(`Bold markers inside code/pre were incorrectly converted. Got HTML: ${html}`);
+      }
+      console.log('✓ Bold markers inside code/pre blocks are not converted.');
     }
   });
 
