@@ -17,6 +17,8 @@
   --shadow: 0 24px 80px rgba(42, 31, 14, .08), 0 1px 0 rgba(42, 31, 14, .04);
   --max: 1120px;
   --article: 760px;
+  --article-text: 920px;
+  --article-wide: 1080px;
   color-scheme: light;
 }
 
@@ -358,11 +360,11 @@ tr:last-child td { border-bottom: 0; }
   opacity: 1;
 }
 .is-reader-page .header-inner {
-  max-width: var(--article);
+  max-width: var(--article-wide);
 }
 .is-reader-page .page {
   display: block;
-  max-width: var(--article);
+  max-width: var(--article-wide);
   margin: 0 auto;
   padding: 40px 22px 80px;
   overflow-x: clip;
@@ -403,9 +405,28 @@ tr:last-child td { border-bottom: 0; }
   border-top: none;
 }
 .is-reader-page .footer-inner {
-  max-width: var(--article);
+  max-width: var(--article-wide);
   opacity: 0.6;
   padding-top: 16px;
+}
+.is-reader-page .article-head > * {
+  max-width: var(--article-text);
+}
+.is-reader-page .article {
+  max-width: var(--article-wide);
+}
+.is-reader-page .article > p,
+.is-reader-page .article > h1,
+.is-reader-page .article > h2,
+.is-reader-page .article > h3,
+.is-reader-page .article > h4,
+.is-reader-page .article > h5,
+.is-reader-page .article > h6,
+.is-reader-page .article > ul,
+.is-reader-page .article > ol,
+.is-reader-page .article > blockquote,
+.is-reader-page .article > hr {
+  max-width: var(--article-text);
 }
 
 @media (max-width: 880px) {
